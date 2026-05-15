@@ -4,8 +4,9 @@ React Native mobile app plus FastAPI backend for a classical image-processing
 diabetic retinopathy screening workflow.
 
 This project does not use CNNs, deep learning, machine learning, or AI
-classification. The backend extracts classical image-processing features and
-returns screening-support results that still require professional review.
+classification. The backend extracts deterministic classical image-processing
+features and returns screening-support results that still require professional
+review.
 
 ## Main Pieces
 

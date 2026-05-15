@@ -11,6 +11,7 @@ class GallerySaverPackage : ReactPackage {
   ): List<NativeModule> = listOf(
     GallerySaverModule(reactContext),
     ImageCropModule(reactContext),
+    ImagePickerModule(reactContext),
   )
 
   override fun createViewManagers(

@@ -1,0 +1,50 @@
+AppDR citations and design references
+Last updated: 2026-05-15
+
+Important scope note
+- AppDR is a thesis screening-support prototype. It is not an FDA-cleared or clinically validated diagnostic device.
+- Commercial DR systems such as IDx-DR and EyeArt use validated clinical workflows, high-quality fundus cameras, and trained machine/deep-learning systems. Their proprietary algorithms were not copied.
+- The current AppDR backend uses classical image processing plus an optional trainable feature-based classifier.
+
+FDA-cleared DR detection systems
+1. U.S. Food and Drug Administration. Device Classification Under Section 513(f)(2)(De Novo): IDx-DR, DEN180001. Decision date: 2018-04-11.
+   URL: https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfpmn/denovo.cfm?id=DEN180001
+   Notes for thesis: IDx-DR is listed as a diabetic retinopathy detection device. The FDA decision summary reports key performance results including sensitivity 87%, specificity 90%, imageability 96%, PPV 73%, and NPV 96%.
+
+2. U.S. Food and Drug Administration. 510(k) Premarket Notification: EyeArt, K200667. Decision date: 2020-08-03.
+   URL: https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfpmn/pmn.cfm?ID=K200667
+   Summary PDF: https://www.accessdata.fda.gov/cdrh_docs/pdf20/K200667.pdf
+   Notes for thesis: EyeArt is indicated to detect more-than-mild DR and vision-threatening DR from color fundus images captured by specified fundus cameras. The FDA summary describes use of an ensemble of clinically aligned machine-learning/deep-learning algorithms, image quality handling, and clinical validation against reading-center grading.
+
+Classical image-processing concepts used by AppDR
+3. Niemeijer, M., van Ginneken, B., Staal, J., Suttorp-Schulten, M. S. A., & Abramoff, M. D. Automatic detection of microaneurysms in color fundus images. IEEE Transactions on Medical Imaging, 2005/2007 indexed record.
+   URL: https://pubmed.ncbi.nlm.nih.gov/17950655/
+   Notes for thesis: Supports the use of green-channel preprocessing, shade correction, normalization, and candidate filtering for microaneurysm detection.
+
+4. Semi-automated quantification of hard exudates in colour fundus photographs diagnosed with diabetic retinopathy.
+   URL: https://pmc.ncbi.nlm.nih.gov/articles/PMC5607622/
+   Notes for thesis: Supports exudate-oriented image-processing steps such as top-hat filtering, statistical filtering, and thresholding.
+
+5. Decencière, E., Zhang, X., Cazuguel, G., et al. Feedback on a publicly distributed image database: the Messidor database. Image Analysis & Stereology, 33(3), 231, 2014. DOI: 10.5566/ias.1155.
+   URL: https://www.researchgate.net/publication/272989606_FEEDBACK_ON_A_PUBLICLY_DISTRIBUTED_IMAGE_DATABASE_THE_MESSIDOR_DATABASE
+   Notes for thesis: Messidor is a commonly used public fundus database for evaluating automatic lesion segmentation and DR grading methods.
+
+Public datasets for training and validation
+6. APTOS 2019 Blindness Detection. Kaggle competition/dataset, 2019.
+   URL: https://www.kaggle.com/competitions/aptos2019-blindness-detection
+   Notes for thesis: Contains retinal fundus images labeled from 0 to 4 according to DR severity. Useful for training and testing, subject to Kaggle terms.
+
+7. EyePACS / Kaggle Diabetic Retinopathy Detection Challenge, 2015.
+   URL: https://www.kaggle.com/competitions/diabetic-retinopathy-detection
+   Notes for thesis: Large fundus-image dataset used in DR detection research. Useful for deep-learning or feature-model training if access is available.
+
+8. Indian Diabetic Retinopathy Image Dataset (IDRiD).
+   URL: https://ieee-dataport.org/open-access/indian-diabetic-retinopathy-image-dataset-idrid
+   Notes for thesis: Includes fundus images and DR-related lesion annotations, useful for validating lesion localization algorithms.
+
+How these references influenced AppDR
+- Input quality gate: follows the validated-system idea that images can be ungradable, but avoids rejecting full-frame fundus crops only because the retinal circular border is not visible.
+- Preprocessing: green-channel enhancement, illumination correction, and CLAHE-style local contrast enhancement.
+- Vessel handling: vessel-like structures are segmented and excluded from red-lesion candidate masks to reduce false microaneurysm and hemorrhage detections.
+- Bright lesion handling: top-hat style bright candidate detection is restricted by color and optic-disc exclusion to reduce false exudate detections.
+- Scoring: current probability is a screening score from extracted features. It is not a clinical probability unless trained and validated on labeled images.

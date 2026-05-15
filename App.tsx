@@ -31,8 +31,10 @@ type CapturedImage = {
   uri: string;
   analysisPath: string;
   analysisUri: string;
+  mimeType: string;
   savedUri: string | null;
   savedAt: string;
+  source: 'capture' | 'upload';
   analysis?: AnalyzeResponse;
 };
 
@@ -42,6 +44,17 @@ type GallerySaverModule = {
 
 type ImageCropModule = {
   cropCenterSquare: (filePath: string, cropScale: number) => Promise<string>;
+};
+
+type PickedImage = {
+  filePath: string;
+  fileUri: string;
+  name: string;
+  type: string;
+};
+
+type ImagePickerModule = {
+  pickImage: () => Promise<PickedImage>;
 };
 
 type SourceCodeModule = {
@@ -67,6 +80,7 @@ type QualityReport = {
 };
 
 type FeatureReport = {
+  fundus_area: number;
   vessel_density: number;
   vessel_area: number;
   bright_lesion_area: number;
@@ -82,6 +96,7 @@ type FeatureReport = {
 type ScreeningResult = {
   classification: string;
   referable: boolean;
+  dr_probability: number;
   reason: string;
   disclaimer: string;
 };
@@ -99,6 +114,9 @@ const gallerySaver = NativeModules.DRGallerySaver as
   | undefined;
 const imageCropper = NativeModules.DRImageCropper as
   | ImageCropModule
+  | undefined;
+const imagePicker = NativeModules.DRImagePicker as
+  | ImagePickerModule
   | undefined;
 
 const LOCAL_NETWORK_API_BASE_URLS = ['http://192.168.1.12:8000'];
@@ -244,7 +262,7 @@ const createAnalyzeFormData = (image: CapturedImage): FormData => {
     {
       uri: image.analysisUri,
       name: getFileName(image.analysisPath),
-      type: 'image/jpeg',
+      type: image.mimeType,
     } as unknown as Blob,
   );
 
@@ -264,6 +282,7 @@ export default function App(): React.JSX.Element {
   const [screen, setScreen] = useState<AppScreen>('home');
   const [isCameraInitialized, setIsCameraInitialized] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isPickingImage, setIsPickingImage] = useState(false);
   const [selectedImage, setSelectedImage] = useState<CapturedImage | null>(
     null,
   );
@@ -554,8 +573,10 @@ export default function App(): React.JSX.Element {
         uri: toFileUri(photoPath),
         analysisPath,
         analysisUri: toFileUri(analysisPath),
+        mimeType: 'image/jpeg',
         savedUri,
         savedAt: new Date().toLocaleString(),
+        source: 'capture',
       };
 
       setSelectedImage(capturedImage);
@@ -572,6 +593,51 @@ export default function App(): React.JSX.Element {
       setIsCapturing(false);
     }
   };
+
+  const uploadImage = useCallback(async (): Promise<void> => {
+    if (isPickingImage) {
+      return;
+    }
+
+    if (Platform.OS !== 'android' || !imagePicker) {
+      Alert.alert(
+        'Upload Not Available',
+        'Image upload is currently available in the Android build. Rebuild the app after this update.',
+      );
+      return;
+    }
+
+    setIsPickingImage(true);
+
+    try {
+      const picked = await imagePicker.pickImage();
+      const uploadedImage: CapturedImage = {
+        id: `${Date.now()}`,
+        path: picked.filePath,
+        uri: picked.fileUri,
+        analysisPath: picked.filePath,
+        analysisUri: picked.fileUri,
+        mimeType: picked.type || 'image/jpeg',
+        savedUri: null,
+        savedAt: new Date().toLocaleString(),
+        source: 'upload',
+      };
+
+      setSelectedImage(uploadedImage);
+      setHistory(current => [uploadedImage, ...current].slice(0, 12));
+      setAnalysisError(null);
+      setScreen('result');
+      analyzeImage(uploadedImage);
+    } catch (error) {
+      const message = getErrorMessage(error);
+
+      if (!message.toLowerCase().includes('no image was selected')) {
+        Alert.alert('Upload Failed', message);
+      }
+    } finally {
+      setIsPickingImage(false);
+    }
+  }, [analyzeImage, isPickingImage]);
 
   const openHistoryImage = useCallback((image: CapturedImage) => {
     setSelectedImage(image);
@@ -690,13 +756,25 @@ export default function App(): React.JSX.Element {
               : 'Capture a retinal image to begin a screening record.'}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={openCapture}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.primaryButtonText}>Capture Image</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={[styles.primaryButton, styles.buttonFlex]}
+            onPress={openCapture}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.primaryButtonText}>Capture</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryButton, styles.buttonFlex]}
+            onPress={uploadImage}
+            disabled={isPickingImage}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {isPickingImage ? 'Opening' : 'Upload'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {renderBackendStatusCard()}
@@ -895,6 +973,12 @@ export default function App(): React.JSX.Element {
                 : selectedImage.analysis?.result.reason ??
                   'Run the FastAPI pipeline on the centered capture region to check image quality and extract classical image-processing features.'}
             </Text>
+            {selectedImage.analysis && (
+              <Text style={styles.resultProbability}>
+                DR chance estimate:{' '}
+                {formatNumber(selectedImage.analysis.result.dr_probability, 0)}%
+              </Text>
+            )}
           </View>
           {renderBackendStatusCard()}
           {analysisError && (
@@ -1001,12 +1085,19 @@ export default function App(): React.JSX.Element {
           <View style={styles.metricGrid}>
             <View style={styles.metricBox}>
               <Text style={styles.metricLabel}>Image</Text>
-              <Text style={styles.metricValue}>Captured</Text>
+              <Text style={styles.metricValue}>
+                {selectedImage.source === 'upload' ? 'Uploaded' : 'Captured'}
+              </Text>
             </View>
             <View style={styles.metricBox}>
-              <Text style={styles.metricLabel}>Gallery</Text>
+              <Text style={styles.metricLabel}>DR chance</Text>
               <Text style={styles.metricValue}>
-                {selectedImage.savedUri ? 'Saved' : 'Local'}
+                {selectedImage.analysis
+                  ? `${formatNumber(
+                      selectedImage.analysis.result.dr_probability,
+                      0,
+                    )}%`
+                  : 'Waiting'}
               </Text>
             </View>
             <View style={styles.metricBox}>
@@ -1051,11 +1142,14 @@ export default function App(): React.JSX.Element {
             </View>
           )}
           <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.primaryButton} onPress={openCapture}>
+            <TouchableOpacity
+              style={[styles.primaryButton, styles.buttonFlex]}
+              onPress={openCapture}
+            >
               <Text style={styles.primaryButtonText}>Retake</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.secondaryButton}
+              style={[styles.secondaryButton, styles.buttonFlex]}
               onPress={() => analyzeImage(selectedImage)}
               disabled={isAnalyzing}
             >
@@ -1068,9 +1162,21 @@ export default function App(): React.JSX.Element {
       ) : (
         <View style={styles.emptyPanel}>
           <Text style={styles.emptyTitle}>No image selected</Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={openCapture}>
-            <Text style={styles.primaryButtonText}>Capture Image</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.primaryButton, styles.buttonFlex]}
+              onPress={openCapture}
+            >
+              <Text style={styles.primaryButtonText}>Capture</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.buttonFlex]}
+              onPress={uploadImage}
+              disabled={isPickingImage}
+            >
+              <Text style={styles.secondaryButtonText}>Upload</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </ScrollView>
@@ -1082,9 +1188,21 @@ export default function App(): React.JSX.Element {
       {history.length === 0 ? (
         <View style={styles.emptyPanel}>
           <Text style={styles.emptyTitle}>No screening images yet</Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={openCapture}>
-            <Text style={styles.primaryButtonText}>Capture Image</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.primaryButton, styles.buttonFlex]}
+              onPress={openCapture}
+            >
+              <Text style={styles.primaryButtonText}>Capture</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.buttonFlex]}
+              onPress={uploadImage}
+              disabled={isPickingImage}
+            >
+              <Text style={styles.secondaryButtonText}>Upload</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : (
         history.map(item => (
@@ -1099,7 +1217,11 @@ export default function App(): React.JSX.Element {
               <Text style={styles.historyTitle}>{getFileName(item.path)}</Text>
               <Text style={styles.historyMeta}>{item.savedAt}</Text>
               <Text style={styles.historyMeta}>
-                {item.savedUri ? 'Saved to gallery' : 'Local capture'}
+                {item.source === 'upload'
+                  ? 'Uploaded image'
+                  : item.savedUri
+                    ? 'Saved to gallery'
+                    : 'Local capture'}
               </Text>
             </View>
           </TouchableOpacity>
@@ -1122,7 +1244,7 @@ export default function App(): React.JSX.Element {
         <Text style={styles.readingText}>
           This project uses enhancement, thresholding, vessel filtering,
           morphology, and feature measurements rather than CNNs, deep learning,
-          or AI-based classification.
+          machine learning, or AI-based classification.
         </Text>
       </View>
     </ScrollView>
@@ -1240,6 +1362,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
+  },
+  buttonRow: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  buttonFlex: {
+    flex: 1,
   },
   secondaryButton: {
     minHeight: 48,
@@ -1656,6 +1786,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
+  },
+  resultProbability: {
+    color: '#0E5E63',
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: 12,
   },
   errorPanel: {
     borderRadius: 8,

@@ -72,6 +72,12 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/uploads/
 backend/results/
+backend/images/healthy/*
+backend/images/dr/*
+backend/images/aptos2019/train_images/*
+backend/images/aptos2019/test_images/*
+!backend/images/healthy/.gitkeep
+!backend/images/dr/.gitkeep
 *.pyc
 
 # Yarn

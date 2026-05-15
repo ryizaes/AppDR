@@ -11,21 +11,26 @@ class QualityReport(BaseModel):
 
 
 class FeatureReport(BaseModel):
+    fundus_area: int
     vessel_density: float
     vessel_area: int
     bright_lesion_area: int
     dark_lesion_area: int
+    bright_lesion_count: int = 0
+    dark_lesion_count: int = 0
     microaneurysm_count: int
     hemorrhage_candidate_count: int
     optic_disc_area: int
     mean_intensity: float
     intensity_std: float
     texture_contrast: float
+    spatial_features: list[float] = Field(default_factory=list)
 
 
 class ScreeningResult(BaseModel):
     classification: str
     referable: bool
+    dr_probability: float
     reason: str
     disclaimer: str
 
