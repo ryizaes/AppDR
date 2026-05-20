@@ -2,8 +2,12 @@
 
 FastAPI service for the AppDR mobile app.
 
-The service uses deterministic classical image processing only. It does not use
-CNNs, deep learning, machine learning, or AI classification.
+The service uses deterministic classical image processing only. It does not load
+a CNN, deep-learning model, or saved machine-learning model.
+
+The practical dataset basis in this workspace is APTOS 2019 Blindness Detection
+under `images/aptos2019/`. Its labels are `0` no DR, `1` mild, `2` moderate,
+`3` severe, and `4` proliferative DR.
 
 ## Setup
 
@@ -46,15 +50,18 @@ http://127.0.0.1:8000/docs
 
 1. Decode the uploaded image.
 2. Crop the image to the centered square that matches the mobile capture guide.
-3. Build a fundus mask.
+3. Build the FOV mask and mask the optic disc as a critical exudate fail-safe.
 4. Assess blur, brightness, contrast, retinal field size, retinal field shape,
    and whether the crop looks like a retinal image.
-5. Enhance the green channel with illumination correction and CLAHE.
-6. Segment vessels and lesion candidates with classical image processing.
-7. Extract global and regional retina feature measurements.
-8. Reject unsuitable captures before assigning a referable/non-referable DR
-   screening-support label.
-9. Return processed images as base64 PNG data URLs.
+5. Extract the green channel, apply CLAHE, and denoise with a median filter.
+6. Apply Scikit-Image Frangi vesselness, adaptive thresholding, and morphology.
+7. Detect microaneurysms with vessel-suppressed black-hat plus circular Hough
+   validation, and detect exudates with L*a*b* lightness, Otsu thresholding,
+   local bright-lesion gating, and optic-disc exclusion.
+8. Extract quadrant spread, PAI percentage, vessel density, and GLCM contrast,
+   homogeneity, and energy.
+9. Reject unsuitable captures before assigning the strict rule-based DR stage.
+10. Return processed images as base64 PNG data URLs.
 
 ## Important Scope
 
@@ -72,4 +79,10 @@ Evaluate:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\evaluate_classical_pipeline.py --csv images\aptos2019\labels.csv --workers 8
+```
+
+Quick smoke test with a few bundled samples from each APTOS label:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_aptos_samples.py --samples-per-label 2
 ```

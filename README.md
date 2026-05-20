@@ -3,10 +3,16 @@
 React Native mobile app plus FastAPI backend for a classical image-processing
 diabetic retinopathy screening workflow.
 
-This project does not use CNNs, deep learning, machine learning, or AI
-classification. The backend extracts deterministic classical image-processing
-features and returns screening-support results that still require professional
-review.
+This project does not load a CNN, deep-learning model, or saved machine-learning
+model. The backend is based on a deterministic OpenCV classical
+image-processing pipeline: FOV masking, optic-disc masking, green-channel
+CLAHE, Scikit-Image Frangi vesselness, black-hat/Hough microaneurysm detection,
+L*a*b*/Otsu exudate extraction, quadrant mapping, PAI, GLCM texture features,
+and rule-based stage grading.
+
+The dataset basis in this repo is APTOS 2019 Blindness Detection under
+`backend/images/aptos2019/`, which uses the severity labels `0` no DR, `1`
+mild, `2` moderate, `3` severe, and `4` proliferative DR.
 
 ## Main Pieces
 
@@ -65,4 +71,11 @@ Useful checks from the project root:
 npm.cmd run lint
 npx.cmd tsc --noEmit
 npm.cmd test -- --runInBand
+```
+
+Backend smoke test against bundled APTOS-style samples:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe scripts\smoke_aptos_samples.py --samples-per-label 2
 ```

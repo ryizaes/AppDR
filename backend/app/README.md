@@ -17,9 +17,10 @@ pipeline.
 square. On Android, the frontend already uploads a cropped square analysis copy;
 the backend square step is a safety fallback for other clients.
 
-The pipeline then creates a fundus mask, performs quality checks, enhances the
-green channel, segments vessels, detects bright and dark lesion candidates, and
-returns feature values plus base64 PNG preview images.
+The pipeline then follows the thesis six-stage flow: FOV and optic-disc masking,
+green-channel CLAHE preprocessing, Frangi vessel segmentation, black-hat/Hough
+microaneurysm detection, L*a*b*/Otsu exudate detection, quadrant and PAI/GLCM
+feature extraction, and strict rule-based stage classification.
 
 Unsuitable captures are stopped before DR classification. A photo can be marked
 unsuitable when it is blurry, too dark, too bright, too low contrast, not shaped

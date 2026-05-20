@@ -3,4 +3,9 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 numpy==2.2.1
 opencv-python-headless==4.10.0.84
+pandas==3.0.3
 pydantic==2.10.4
+scikit-learn==1.8.0
+matplotlib==3.10.9
+seaborn==0.13.2
+imbalanced-learn==0.14.1

@@ -25,6 +25,8 @@ def predict(csv_path: Path, image_dir: Path, output_path: Path) -> None:
         fieldnames = [
             "id_code",
             "predicted_label",
+            "predicted_stage",
+            "stage_label",
             "dr_probability",
             "classification",
             "quality_acceptable",
@@ -48,6 +50,8 @@ def predict(csv_path: Path, image_dir: Path, output_path: Path) -> None:
                 {
                     "id_code": id_code,
                     "predicted_label": 1 if result.result.referable else 0,
+                    "predicted_stage": result.result.stage,
+                    "stage_label": result.result.stage_label,
                     "dr_probability": result.result.dr_probability,
                     "classification": result.result.classification,
                     "quality_acceptable": result.quality.is_acceptable,

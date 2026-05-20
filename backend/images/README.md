@@ -33,14 +33,13 @@ Labels:
 - `3` = severe DR
 - `4` = proliferative DR
 
-The current trainer converts labels `1` to `4` into one DR-positive class.
+The current deterministic pipeline returns a DR-detected flag and a stage
+estimate on the same `0` to `4` scale. No trainer or learned model is used.
 
-## Train Command
+## Smoke Test
 
 From `backend/`:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\train_feature_model.py --csv images\labels.csv
+.\.venv\Scripts\python.exe scripts\smoke_aptos_samples.py --csv images\aptos2019\labels.csv --samples-per-label 2
 ```
-
-Restart the backend after training.

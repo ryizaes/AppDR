@@ -86,19 +86,34 @@ type FeatureReport = {
   bright_lesion_area: number;
   dark_lesion_area: number;
   microaneurysm_count: number;
+  microaneurysm_area: number;
+  exudate_count: number;
+  exudate_area: number;
+  exudate_quadrants: string[];
+  exudate_quadrant_count: number;
+  pathology_area_index: number;
   hemorrhage_candidate_count: number;
   optic_disc_area: number;
+  optic_disc_detected: boolean;
   mean_intensity: number;
   intensity_std: number;
   texture_contrast: number;
+  glcm_contrast: number;
+  glcm_homogeneity: number;
+  glcm_energy: number;
 };
 
 type ScreeningResult = {
   classification: string;
   referable: boolean;
   dr_probability: number;
+  stage: number | null;
+  stage_label: string;
   reason: string;
   disclaimer: string;
+  model_type?: string;
+  confidence?: number | null;
+  probabilities?: Record<string, number>;
 };
 
 type AnalyzeResponse = {
@@ -191,6 +206,9 @@ const getFileName = (path: string): string => path.split('/').pop() ?? 'image';
 
 const formatNumber = (value: number, decimals = 1): string =>
   Number.isFinite(value) ? value.toFixed(decimals) : '0.0';
+
+const formatStageValue = (stage: number | null): string =>
+  stage === null ? 'N/A' : stage === 0 ? '0 No DR' : `Stage ${stage}`;
 
 const formatCheckedAt = (): string =>
   new Date().toLocaleTimeString([], {
@@ -974,10 +992,22 @@ export default function App(): React.JSX.Element {
                   'Run the FastAPI pipeline on the centered capture region to check image quality and extract classical image-processing features.'}
             </Text>
             {selectedImage.analysis && (
-              <Text style={styles.resultProbability}>
-                DR chance estimate:{' '}
-                {formatNumber(selectedImage.analysis.result.dr_probability, 0)}%
-              </Text>
+              <View style={styles.resultSummaryRow}>
+                <View style={styles.stageBadge}>
+                  <Text style={styles.stageBadgeLabel}>Stage</Text>
+                  <Text style={styles.stageBadgeValue}>
+                    {selectedImage.analysis.result.stage ?? 'N/A'}
+                  </Text>
+                </View>
+                <Text style={styles.resultProbability}>
+                  DR chance estimate:{' '}
+                  {formatNumber(
+                    selectedImage.analysis.result.dr_probability,
+                    0,
+                  )}
+                  %
+                </Text>
+              </View>
             )}
           </View>
           {renderBackendStatusCard()}
@@ -1072,6 +1102,25 @@ export default function App(): React.JSX.Element {
                     <Image
                       source={{
                         uri: selectedImage.analysis.processed_images
+                          .microaneurysms,
+                      }}
+                      style={styles.processedImage}
+                    />
+                    <Text style={styles.processedLabel}>MAs</Text>
+                  </View>
+                  <View style={styles.processedItem}>
+                    <Image
+                      source={{
+                        uri: selectedImage.analysis.processed_images.exudates,
+                      }}
+                      style={styles.processedImage}
+                    />
+                    <Text style={styles.processedLabel}>Exudates</Text>
+                  </View>
+                  <View style={styles.processedItem}>
+                    <Image
+                      source={{
+                        uri: selectedImage.analysis.processed_images
                           .lesion_overlay,
                       }}
                       style={styles.processedImage}
@@ -1101,11 +1150,10 @@ export default function App(): React.JSX.Element {
               </Text>
             </View>
             <View style={styles.metricBox}>
-              <Text style={styles.metricLabel}>Lesions</Text>
+              <Text style={styles.metricLabel}>DR stage</Text>
               <Text style={styles.metricValue}>
                 {selectedImage.analysis?.quality.is_acceptable
-                  ? selectedImage.analysis.features.microaneurysm_count +
-                    selectedImage.analysis.features.hemorrhage_candidate_count
+                  ? formatStageValue(selectedImage.analysis.result.stage)
                   : selectedImage.analysis
                     ? 'N/A'
                     : 'Waiting'}
@@ -1116,28 +1164,50 @@ export default function App(): React.JSX.Element {
             <View style={styles.featurePanel}>
               <Text style={styles.sectionTitle}>Extracted features</Text>
               <Text style={styles.featureText}>
+                PAI:{' '}
+                {formatNumber(
+                  selectedImage.analysis.features.pathology_area_index,
+                  3,
+                )}
+                %
+              </Text>
+              <Text style={styles.featureText}>
                 Vessel density:{' '}
                 {formatNumber(
                   selectedImage.analysis.features.vessel_density * 100,
                   2,
                 )}
-                %
+                %  
               </Text>
               <Text style={styles.featureText}>
-                Bright lesion area:{' '}
-                {selectedImage.analysis.features.bright_lesion_area}
+                Microaneurysms:{' '}
+                {selectedImage.analysis.features.microaneurysm_count} (
+                {selectedImage.analysis.features.microaneurysm_area}px)
               </Text>
               <Text style={styles.featureText}>
-                Dark lesion area:{' '}
-                {selectedImage.analysis.features.dark_lesion_area}
+                Exudates: {selectedImage.analysis.features.exudate_count} (
+                {selectedImage.analysis.features.exudate_area}px)
               </Text>
               <Text style={styles.featureText}>
-                Microaneurysm candidates:{' '}
-                {selectedImage.analysis.features.microaneurysm_count}
+                Exudate quadrants:{' '}
+                {selectedImage.analysis.features.exudate_quadrants.length > 0
+                  ? selectedImage.analysis.features.exudate_quadrants.join(', ')
+                  : 'None'}
               </Text>
               <Text style={styles.featureText}>
-                Hemorrhage candidates:{' '}
-                {selectedImage.analysis.features.hemorrhage_candidate_count}
+                GLCM contrast:{' '}
+                {formatNumber(selectedImage.analysis.features.glcm_contrast, 2)}
+                {'   '}homogeneity:{' '}
+                {formatNumber(
+                  selectedImage.analysis.features.glcm_homogeneity,
+                  3,
+                )}
+                {'   '}energy:{' '}
+                {formatNumber(selectedImage.analysis.features.glcm_energy, 3)}
+              </Text>
+              <Text style={styles.featureText}>
+                Dataset stage scale: 0 no DR, 1 mild, 2 moderate, 3 severe, 4
+                proliferative.
               </Text>
             </View>
           )}
@@ -1243,8 +1313,8 @@ export default function App(): React.JSX.Element {
         <Text style={styles.readingTitle}>Classical Processing Focus</Text>
         <Text style={styles.readingText}>
           This project uses enhancement, thresholding, vessel filtering,
-          morphology, and feature measurements rather than CNNs, deep learning,
-          machine learning, or AI-based classification.
+          morphology, and handcrafted feature measurements with a supervised
+          tabular classifier rather than CNNs or deep learning.
         </Text>
       </View>
     </ScrollView>
@@ -1787,11 +1857,37 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 8,
   },
+  resultSummaryRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  stageBadge: {
+    alignItems: 'center',
+    borderRadius: 8,
+    backgroundColor: '#0E7C7B',
+    minWidth: 70,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  stageBadgeLabel: {
+    color: '#D9F5EF',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  stageBadgeValue: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 2,
+  },
   resultProbability: {
+    flex: 1,
     color: '#0E5E63',
     fontSize: 15,
     fontWeight: '800',
-    marginTop: 12,
   },
   errorPanel: {
     borderRadius: 8,

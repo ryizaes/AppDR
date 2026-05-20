@@ -16,7 +16,8 @@ from app.pipeline import analyze_image
 def evaluate(csv_path: Path, workers: int) -> None:
     rows = read_label_rows(csv_path)
     labels: list[int] = []
-    predictions: list[int] = []
+    binary_predictions: list[int] = []
+    stage_predictions: list[int] = []
     probabilities: list[float] = []
     completed = 0
 
@@ -27,9 +28,10 @@ def evaluate(csv_path: Path, workers: int) -> None:
         ]
 
         for future in as_completed(futures):
-            label, prediction, probability = future.result()
+            label, binary_prediction, stage_prediction, probability = future.result()
             labels.append(label)
-            predictions.append(prediction)
+            binary_predictions.append(binary_prediction)
+            stage_predictions.append(stage_prediction)
             probabilities.append(probability)
             completed += 1
 
@@ -37,14 +39,19 @@ def evaluate(csv_path: Path, workers: int) -> None:
                 print(f"Evaluated {completed}/{len(rows)}")
 
     label_array = np.array(labels, dtype=np.int64)
-    prediction_array = np.array(predictions, dtype=np.int64)
+    binary_label_array = (label_array > 0).astype(np.int64)
+    binary_prediction_array = np.array(binary_predictions, dtype=np.int64)
+    stage_prediction_array = np.array(stage_predictions, dtype=np.int64)
     probability_array = np.array(probabilities, dtype=np.float32)
 
-    print("Accuracy:", round(float(np.mean(prediction_array == label_array)), 4))
-    print("ROC AUC:", round(float(binary_auc(label_array, probability_array)), 4))
-    print("Confusion matrix:")
-    print(confusion_matrix(label_array, prediction_array))
-    print(classification_report(label_array, prediction_array))
+    print("Binary accuracy:", round(float(np.mean(binary_prediction_array == binary_label_array)), 4))
+    print("Stage accuracy:", round(float(np.mean(stage_prediction_array == label_array)), 4))
+    print("ROC AUC:", round(float(binary_auc(binary_label_array, probability_array)), 4))
+    print("Binary confusion matrix:")
+    print(binary_confusion_matrix(binary_label_array, binary_prediction_array))
+    print("Stage confusion matrix:")
+    print(stage_confusion_matrix(label_array, stage_prediction_array))
+    print(binary_classification_report(binary_label_array, binary_prediction_array))
 
 
 def read_label_rows(csv_path: Path) -> list[dict[str, str]]:
@@ -70,12 +77,13 @@ def read_label_rows(csv_path: Path) -> list[dict[str, str]]:
     raise ValueError("CSV must contain image_path,label or id_code,diagnosis columns.")
 
 
-def analyze_row(base_dir: Path, row: dict[str, str]) -> tuple[int, int, float]:
+def analyze_row(base_dir: Path, row: dict[str, str]) -> tuple[int, int, int, float]:
     image_path = resolve_image_path(base_dir, row["image_path"])
-    label = 1 if int(row["label"]) > 0 else 0
+    label = int(row["label"])
     output = analyze_image(image_path.read_bytes(), include_processed_images=False)
-    prediction = 1 if output.result.referable else 0
-    return label, prediction, output.result.dr_probability
+    binary_prediction = 1 if output.result.referable else 0
+    stage_prediction = output.result.stage if output.result.stage is not None else 0
+    return label, binary_prediction, stage_prediction, output.result.dr_probability
 
 
 def resolve_image_path(base_dir: Path, value: str) -> Path:
@@ -104,7 +112,7 @@ def binary_auc(labels: np.ndarray, probabilities: np.ndarray) -> float:
     return float((wins + (0.5 * ties)) / comparisons.size)
 
 
-def confusion_matrix(labels: np.ndarray, predictions: np.ndarray) -> np.ndarray:
+def binary_confusion_matrix(labels: np.ndarray, predictions: np.ndarray) -> np.ndarray:
     return np.array(
         [
             [
@@ -120,7 +128,17 @@ def confusion_matrix(labels: np.ndarray, predictions: np.ndarray) -> np.ndarray:
     )
 
 
-def classification_report(labels: np.ndarray, predictions: np.ndarray) -> str:
+def stage_confusion_matrix(labels: np.ndarray, predictions: np.ndarray) -> np.ndarray:
+    matrix = np.zeros((5, 5), dtype=np.int64)
+
+    for label, prediction in zip(labels, predictions):
+        if 0 <= label <= 4 and 0 <= prediction <= 4:
+            matrix[label, prediction] += 1
+
+    return matrix
+
+
+def binary_classification_report(labels: np.ndarray, predictions: np.ndarray) -> str:
     lines = ["class,precision,recall,f1,support"]
 
     for class_id, name in ((0, "healthy"), (1, "dr")):

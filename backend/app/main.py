@@ -5,11 +5,11 @@ from app.pipeline import analyze_image
 from app.schemas import AnalyzeResponse
 
 app = FastAPI(
-    title="DR Screening Classical Image Processing API",
+    title="DR Screening Handcrafted Feature ML API",
     version="0.1.0",
     description=(
-        "Classical image processing service for referable diabetic retinopathy "
-        "screening support. No CNN, deep learning, machine learning, or AI."
+        "Classical image processing plus supervised handcrafted-feature machine "
+        "learning for diabetic retinopathy screening support. No CNN or deep learning."
     ),
 )
 
