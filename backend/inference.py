@@ -22,8 +22,9 @@ def predict_stage(
 ) -> dict[str, Any]:
     """Predict DR stage from one fundus image using the saved ML pipeline."""
     model = load_model(model_path)
+    feature_names = load_model_feature_names()
     feature_dict = extract_feature_dict(image_path)
-    return predict_from_feature_dict(feature_dict, model)
+    return predict_from_feature_dict(feature_dict, model, feature_names)
 
 
 def load_model(model_path: str | Path) -> Any:
@@ -34,9 +35,30 @@ def load_model(model_path: str | Path) -> Any:
         return pickle.load(file)
 
 
-def predict_from_feature_dict(feature_dict: dict[str, float], model: Any) -> dict[str, Any]:
+def load_model_feature_names(
+    metadata_path: str | Path = config.METADATA_PATH,
+) -> list[str]:
+    try:
+        with Path(metadata_path).open("r", encoding="utf-8") as file:
+            metadata = json.load(file)
+    except Exception:
+        return list(config.FEATURE_NAMES)
+
+    names = metadata.get("feature_names") if isinstance(metadata, dict) else None
+    if isinstance(names, list) and all(isinstance(name, str) for name in names):
+        return list(names)
+
+    return list(config.FEATURE_NAMES)
+
+
+def predict_from_feature_dict(
+    feature_dict: dict[str, float],
+    model: Any,
+    feature_names: list[str] | None = None,
+) -> dict[str, Any]:
+    selected_features = feature_names or config.FEATURE_NAMES
     feature_vector = np.array(
-        [[float(feature_dict[name]) for name in config.FEATURE_NAMES]],
+        [[float(feature_dict.get(name, 0.0)) for name in selected_features]],
         dtype=np.float64,
     )
     prediction = int(model.predict(feature_vector)[0])
@@ -52,7 +74,10 @@ def predict_from_feature_dict(feature_dict: dict[str, float], model: Any) -> dic
         "stage_name": config.CLASS_NAMES.get(prediction, "Unknown"),
         "confidence": confidence,
         "probabilities": probabilities,
-        "feature_vector": {name: float(feature_dict[name]) for name in config.FEATURE_NAMES},
+        "feature_vector": {
+            name: float(feature_dict.get(name, 0.0))
+            for name in selected_features
+        },
     }
 
 
@@ -70,6 +95,7 @@ def predict_dataset(
         raise ValueError(f"CSV must contain column: {config.APTOS_IMAGE_ID_COLUMN}")
 
     model = load_model(model_path)
+    feature_names = load_model_feature_names()
     rows: list[dict[str, Any]] = []
     failed: list[str] = []
     image_root = Path(images_dir)
@@ -82,14 +108,14 @@ def predict_dataset(
         )
         iterator = progress_bar(feature_results, total=len(records), prefix="Predicting test images")
         for ok, payload in iterator:
-            append_prediction_or_failure(ok, payload, model, rows, failed)
+            append_prediction_or_failure(ok, payload, model, feature_names, rows, failed)
     else:
         tasks = [(index, record, image_root) for index, record in enumerate(records)]
         with ProcessPoolExecutor(max_workers=workers) as executor:
             futures = [executor.submit(extract_test_sample_worker, task) for task in tasks]
             for future in progress_bar(as_completed(futures), total=len(futures), prefix="Predicting test images"):
                 ok, payload = future.result()
-                append_prediction_or_failure(ok, payload, model, rows, failed)
+                append_prediction_or_failure(ok, payload, model, feature_names, rows, failed)
 
     output_path = Path(output_csv)
     ensure_dir(output_path.parent)
@@ -125,6 +151,7 @@ def append_prediction_or_failure(
     ok: bool,
     payload: dict[str, Any],
     model: Any,
+    feature_names: list[str],
     rows: list[dict[str, Any]],
     failed: list[str],
 ) -> None:
@@ -132,7 +159,7 @@ def append_prediction_or_failure(
         failed.append(payload["error"])
         return
 
-    result = predict_from_feature_dict(payload["features"], model)
+    result = predict_from_feature_dict(payload["features"], model, feature_names)
     row: dict[str, Any] = {
         "_row_order": payload["row_order"],
         config.APTOS_IMAGE_ID_COLUMN: payload["image_id"],
@@ -142,7 +169,7 @@ def append_prediction_or_failure(
     }
     for label in config.CLASS_LABELS:
         row[f"prob_stage_{label}"] = result["probabilities"].get(label, 0.0)
-    for feature_name in config.FEATURE_NAMES:
+    for feature_name in feature_names:
         row[feature_name] = result["feature_vector"][feature_name]
     rows.append(row)
 
@@ -152,11 +179,24 @@ def prediction_probabilities(model: Any, feature_vector: np.ndarray) -> dict[int
         return {}
 
     probabilities = model.predict_proba(feature_vector)[0]
-    classes = getattr(model, "classes_", config.CLASS_LABELS)
+    classes = model_classes(model)
     return {
         int(class_label): float(probability)
         for class_label, probability in zip(classes, probabilities)
     }
+
+
+def model_classes(model: Any) -> list[int]:
+    classes = getattr(model, "classes_", None)
+
+    if classes is None and hasattr(model, "named_steps"):
+        classifier = model.named_steps.get("classifier")
+        classes = getattr(classifier, "classes_", None)
+
+    if classes is None:
+        return list(config.CLASS_LABELS)
+
+    return [int(label) for label in classes]
 
 
 def parse_args() -> argparse.Namespace:

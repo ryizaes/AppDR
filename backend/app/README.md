@@ -1,7 +1,8 @@
 # Backend App Code
 
 This folder contains the FastAPI application and the classical image-processing
-pipeline.
+pipeline. It returns screening-support estimates for clinician review, not
+autonomous diagnoses.
 
 ## Files
 
@@ -20,9 +21,9 @@ the backend square step is a safety fallback for other clients.
 The pipeline then follows the thesis six-stage flow: FOV and optic-disc masking,
 green-channel CLAHE preprocessing, Frangi vessel segmentation, black-hat/Hough
 microaneurysm detection, L*a*b*/Otsu exudate detection, quadrant and PAI/GLCM
-feature extraction, and strict rule-based stage classification.
+feature extraction, and shallow tabular stage estimation with clinician review.
 
-Unsuitable captures are stopped before DR classification. A photo can be marked
+Unsuitable captures are stopped before DR stage estimation. A photo can be marked
 unsuitable when it is blurry, too dark, too bright, too low contrast, not shaped
 like a retinal field, fills the crop like a background surface, or has no visible
 retinal vessel pattern.

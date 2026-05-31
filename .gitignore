@@ -72,6 +72,7 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/uploads/
 backend/results/
+backend/tmp/*.log
 backend/images/healthy/*
 backend/images/dr/*
 backend/images/aptos2019/train_images/*

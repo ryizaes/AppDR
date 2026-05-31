@@ -141,7 +141,19 @@ def read_feature_table(path: str | Path):
     import pandas as pd
 
     table = pd.read_csv(path)
-    missing = [column for column in config.CSV_COLUMNS if column not in table.columns]
-    if missing:
-        raise ValueError(f"Feature CSV is missing required columns: {missing}")
+    if "label" not in table.columns:
+        raise ValueError("Feature CSV is missing required column: label")
+
+    has_expanded = all(column in table.columns for column in config.FEATURE_NAMES)
+    has_legacy = all(column in table.columns for column in config.LEGACY_FEATURE_NAMES)
+    if not has_expanded and not has_legacy:
+        missing = [
+            column
+            for column in config.FEATURE_NAMES
+            if column not in table.columns
+        ]
+        raise ValueError(
+            "Feature CSV is missing required handcrafted feature columns. "
+            f"Missing expanded columns: {missing}",
+        )
     return table

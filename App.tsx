@@ -10,6 +10,7 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -101,6 +102,31 @@ type FeatureReport = {
   glcm_contrast: number;
   glcm_homogeneity: number;
   glcm_energy: number;
+  expanded_features?: Record<string, number>;
+};
+
+type LesionPoint = {
+  x: number;
+  y: number;
+};
+
+type LesionRegion = {
+  bbox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  centroid: LesionPoint;
+  area: number;
+  contour: LesionPoint[];
+};
+
+type ScreeningTier = {
+  status: string;
+  referable: boolean;
+  rule: string;
+  recommendation: string;
 };
 
 type ScreeningResult = {
@@ -114,6 +140,7 @@ type ScreeningResult = {
   model_type?: string;
   confidence?: number | null;
   probabilities?: Record<string, number>;
+  screening?: ScreeningTier | null;
 };
 
 type AnalyzeResponse = {
@@ -122,6 +149,28 @@ type AnalyzeResponse = {
   features: FeatureReport;
   result: ScreeningResult;
   processed_images: Record<string, string>;
+  lesion_regions?: Record<string, LesionRegion[]>;
+  image_shape?: Record<string, number>;
+};
+
+type AnalyzeTaskResponse = {
+  task_id: string;
+  status_url: string;
+  message: string;
+};
+
+type AnalyzeTaskStatusResponse = {
+  task_id: string;
+  state: 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | string;
+  message: string;
+  result: AnalyzeResponse | null;
+  error: string | null;
+};
+
+type CalibrationSettings = {
+  clahe_clip_limit: number;
+  exudate_percentile: number;
+  exudate_local_percentile: number;
 };
 
 const gallerySaver = NativeModules.DRGallerySaver as
@@ -137,7 +186,15 @@ const imagePicker = NativeModules.DRImagePicker as
 const LOCAL_NETWORK_API_BASE_URLS = ['http://192.168.1.12:8000'];
 const HEALTH_CHECK_TIMEOUT_MS = 4000;
 const ANALYZE_TIMEOUT_MS = 25000;
+const STATUS_POLL_INTERVAL_MS = 1500;
+const STATUS_TIMEOUT_MS = 180000;
 const ANALYSIS_CROP_SCALE = 1;
+const DEFAULT_CALIBRATION: CalibrationSettings = {
+  clahe_clip_limit: 2,
+  exudate_percentile: 97.5,
+  exudate_local_percentile: 98,
+};
+const STAGE_OPTIONS = [0, 1, 2, 3, 4];
 
 const isLoopbackHost = (hostname: string): boolean =>
   ['localhost', '127.0.0.1', '::1'].includes(hostname);
@@ -273,7 +330,95 @@ const fetchWithTimeout = async (
   }
 };
 
-const createAnalyzeFormData = (image: CapturedImage): FormData => {
+const sleep = (milliseconds: number): Promise<void> =>
+  new Promise(resolve => setTimeout(resolve, milliseconds));
+
+const parseJsonResponse = async (response: Response): Promise<unknown> => {
+  const responseText = await response.text();
+  return responseText ? JSON.parse(responseText) : null;
+};
+
+const isAnalyzeResponse = (value: unknown): value is AnalyzeResponse =>
+  typeof value === 'object' &&
+  value !== null &&
+  'quality' in value &&
+  'features' in value &&
+  'result' in value;
+
+const isAnalyzeTaskResponse = (value: unknown): value is AnalyzeTaskResponse =>
+  typeof value === 'object' &&
+  value !== null &&
+  'task_id' in value &&
+  'status_url' in value;
+
+const clampNumber = (value: number, min: number, max: number): number =>
+  Math.max(min, Math.min(max, value));
+
+const formatPercent = (value: number | null | undefined, decimals = 0): string =>
+  value === null || value === undefined
+    ? 'N/A'
+    : `${formatNumber(value * 100, decimals)}%`;
+
+const getScreeningStatus = (analysis: AnalyzeResponse): ScreeningTier => {
+  if (analysis.result.screening) {
+    return analysis.result.screening;
+  }
+
+  return {
+    status: analysis.result.referable ? 'Referable' : 'Non-Referable',
+    referable: analysis.result.referable,
+    rule: 'Fallback screening mapping from the returned stage.',
+    recommendation: analysis.result.referable
+      ? 'Forward the case for eye-care specialist review.'
+      : 'Document the finding and continue routine screening review.',
+  };
+};
+
+const pollAnalysisTask = async (
+  apiBaseUrl: string,
+  taskId: string,
+  onProgress: (message: string) => void,
+): Promise<AnalyzeResponse> => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < STATUS_TIMEOUT_MS) {
+    const response = await fetchWithTimeout(
+      `${apiBaseUrl}/status/${taskId}`,
+      { method: 'GET' },
+      ANALYZE_TIMEOUT_MS,
+    );
+    const body = (await parseJsonResponse(response)) as
+      | AnalyzeTaskStatusResponse
+      | null;
+
+    if (!response.ok) {
+      const detail =
+        typeof (body as { detail?: unknown } | null)?.detail === 'string'
+          ? String((body as { detail?: unknown }).detail)
+          : 'Task polling failed.';
+      throw new Error(detail);
+    }
+
+    onProgress(body?.message ?? 'Analysis task is running.');
+
+    if (body?.state === 'SUCCESS' && body.result) {
+      return body.result;
+    }
+
+    if (body?.state === 'FAILURE') {
+      throw new Error(body.error ?? 'Analysis task failed.');
+    }
+
+    await sleep(STATUS_POLL_INTERVAL_MS);
+  }
+
+  throw new Error('Analysis task timed out while waiting for the backend.');
+};
+
+const createAnalyzeFormData = (
+  image: CapturedImage,
+  calibration: CalibrationSettings,
+): FormData => {
   const formData = new FormData();
   formData.append(
     'file',
@@ -282,6 +427,12 @@ const createAnalyzeFormData = (image: CapturedImage): FormData => {
       name: getFileName(image.analysisPath),
       type: image.mimeType,
     } as unknown as Blob,
+  );
+  formData.append('clahe_clip_limit', `${calibration.clahe_clip_limit}`);
+  formData.append('exudate_percentile', `${calibration.exudate_percentile}`);
+  formData.append(
+    'exudate_local_percentile',
+    `${calibration.exudate_local_percentile}`,
   );
 
   return formData;
@@ -316,6 +467,17 @@ export default function App(): React.JSX.Element {
     endpoint: null,
     message: 'Connection not checked yet.',
   });
+  const [showLesionOverlay, setShowLesionOverlay] = useState(true);
+  const [manualStage, setManualStage] = useState<number | null>(null);
+  const [overrideConfirmed, setOverrideConfirmed] = useState(false);
+  const [calibration, setCalibration] =
+    useState<CalibrationSettings>(DEFAULT_CALIBRATION);
+
+  useEffect(() => {
+    setShowLesionOverlay(true);
+    setManualStage(null);
+    setOverrideConfirmed(false);
+  }, [selectedImage?.id]);
 
   const checkGalleryPermission = useCallback(
     async (showDeniedAlert = false): Promise<boolean> => {
@@ -492,6 +654,8 @@ export default function App(): React.JSX.Element {
     async (image: CapturedImage): Promise<void> => {
       setIsAnalyzing(true);
       setAnalysisError(null);
+      setManualStage(null);
+      setOverrideConfirmed(false);
 
       try {
         let lastNetworkError: unknown = null;
@@ -502,31 +666,52 @@ export default function App(): React.JSX.Element {
               `${apiBaseUrl}/analyze`,
               {
                 method: 'POST',
-                body: createAnalyzeFormData(image),
+                body: createAnalyzeFormData(image, calibration),
               },
               ANALYZE_TIMEOUT_MS,
             );
 
-            const responseText = await response.text();
-            const responseBody = responseText ? JSON.parse(responseText) : null;
+            const responseBody = await parseJsonResponse(response);
 
             setActiveApiBaseUrl(apiBaseUrl);
             setBackendStatus({
               state: 'connected',
               endpoint: apiBaseUrl,
-              message: 'Analysis backend responded.',
+              message: 'Analysis task submitted.',
               checkedAt: formatCheckedAt(),
             });
 
             if (!response.ok) {
               const detail =
-                typeof responseBody?.detail === 'string'
-                  ? responseBody.detail
+                typeof (responseBody as { detail?: unknown } | null)?.detail ===
+                'string'
+                  ? String((responseBody as { detail?: unknown }).detail)
                   : 'Image analysis failed.';
               throw new Error(detail);
             }
 
-            applyAnalysisToImage(image.id, responseBody as AnalyzeResponse);
+            if (isAnalyzeResponse(responseBody)) {
+              applyAnalysisToImage(image.id, responseBody);
+              return;
+            }
+
+            if (!isAnalyzeTaskResponse(responseBody)) {
+              throw new Error('Backend did not return an analysis task.');
+            }
+
+            const analysis = await pollAnalysisTask(
+              apiBaseUrl,
+              responseBody.task_id,
+              message => {
+                setBackendStatus({
+                  state: 'connected',
+                  endpoint: apiBaseUrl,
+                  message,
+                  checkedAt: formatCheckedAt(),
+                });
+              },
+            );
+            applyAnalysisToImage(image.id, analysis);
             return;
           } catch (requestError) {
             if (!isNetworkRequestError(requestError)) {
@@ -545,7 +730,7 @@ export default function App(): React.JSX.Element {
         setIsAnalyzing(false);
       }
     },
-    [activeApiBaseUrl, applyAnalysisToImage],
+    [activeApiBaseUrl, applyAnalysisToImage, calibration],
   );
 
   const takePhoto = async (): Promise<void> => {
@@ -756,9 +941,10 @@ export default function App(): React.JSX.Element {
       <StatusBar barStyle="dark-content" backgroundColor="#F5FAF8" />
       <View style={styles.brandBlock}>
         <Text style={styles.brandLabel}>DR Screening</Text>
-        <Text style={styles.brandTitle}>Referable DR Review</Text>
+        <Text style={styles.brandTitle}>Clinician Review Support</Text>
         <Text style={styles.brandSubtitle}>
-          Classical image processing workflow for retinal screening support.
+          Classical retinal image processing for clinician-reviewed screening
+          support.
         </Text>
       </View>
 
@@ -841,8 +1027,9 @@ export default function App(): React.JSX.Element {
       <View style={styles.noticePanel}>
         <Text style={styles.noticeTitle}>Screening support only</Text>
         <Text style={styles.noticeText}>
-          Results must be reviewed by an ophthalmologist or qualified eye-care
-          professional before any clinical decision is made.
+          Stage estimates can under-call advanced disease. A qualified eye-care
+          professional must review the image, overlay, and manual stage before
+          any clinical decision is made.
         </Text>
       </View>
     </ScrollView>
@@ -962,6 +1149,135 @@ export default function App(): React.JSX.Element {
     );
   };
 
+  const updateCalibrationValue = useCallback(
+    (key: keyof CalibrationSettings, delta: number, min: number, max: number) => {
+      setCalibration(current => ({
+        ...current,
+        [key]: Number(
+          clampNumber(current[key] + delta, min, max).toFixed(2),
+        ),
+      }));
+    },
+    [],
+  );
+
+  const renderCalibrationControl = (
+    label: string,
+    key: keyof CalibrationSettings,
+    min: number,
+    max: number,
+    step: number,
+    decimals = 1,
+  ) => {
+    const value = calibration[key];
+    const ratio = ((value - min) / (max - min)) * 100;
+
+    return (
+      <View style={styles.calibrationRow} key={key}>
+        <View style={styles.calibrationHeader}>
+          <Text style={styles.calibrationLabel}>{label}</Text>
+          <Text style={styles.calibrationValue}>
+            {formatNumber(value, decimals)}
+          </Text>
+        </View>
+        <View style={styles.calibrationControls}>
+          <TouchableOpacity
+            style={styles.stepButton}
+            onPress={() => updateCalibrationValue(key, -step, min, max)}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.stepButtonText}>-</Text>
+          </TouchableOpacity>
+          <View style={styles.calibrationTrack}>
+            <View
+              style={[
+                styles.calibrationFill,
+                { width: `${clampNumber(ratio, 0, 100)}%` },
+              ]}
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.stepButton}
+            onPress={() => updateCalibrationValue(key, step, min, max)}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.stepButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderSpecialistOverride = (analysis: AnalyzeResponse) => {
+    const systemStage = analysis.result.stage;
+    const selectedStage = manualStage ?? systemStage;
+    const finalStageLabel =
+      selectedStage === null ? 'Unstageable' : `Stage ${selectedStage}`;
+    const auditText = overrideConfirmed
+      ? `Clinician review recorded locally: ${finalStageLabel}.`
+      : 'Awaiting clinician review.';
+
+    return (
+      <View style={styles.overridePanel}>
+        <Text style={styles.sectionTitle}>Specialist manual review</Text>
+        <View style={styles.overrideSummary}>
+          <Text style={styles.overrideLabel}>System stage estimate</Text>
+          <Text style={styles.overrideValue}>
+            {systemStage === null ? 'Unstageable' : `Stage ${systemStage}`}
+          </Text>
+        </View>
+        <View style={styles.stageSelector}>
+          {STAGE_OPTIONS.map(stage => {
+            const isSelected = selectedStage === stage;
+            return (
+              <TouchableOpacity
+                key={stage}
+                style={[
+                  styles.stageOption,
+                  isSelected && styles.stageOptionSelected,
+                ]}
+                onPress={() => {
+                  setManualStage(stage);
+                  setOverrideConfirmed(false);
+                }}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    styles.stageOptionText,
+                    isSelected && styles.stageOptionTextSelected,
+                  ]}
+                >
+                  {stage}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.primaryButton, styles.buttonFlex]}
+            onPress={() => {
+              setManualStage(null);
+              setOverrideConfirmed(true);
+            }}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.primaryButtonText}>Confirm Estimate</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryButton, styles.buttonFlex]}
+            onPress={() => setOverrideConfirmed(true)}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.secondaryButtonText}>Save Manual Stage</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.auditText}>{auditText}</Text>
+      </View>
+    );
+  };
+
   const renderResult = () => (
     <ScrollView style={styles.appSurface} contentContainerStyle={styles.page}>
       {renderTopBar('Case Review')}
@@ -970,46 +1286,84 @@ export default function App(): React.JSX.Element {
           <Image
             source={{
               uri:
-                selectedImage.analysis?.processed_images.original ??
+                selectedImage.analysis && showLesionOverlay
+                  ? selectedImage.analysis.processed_images.lesion_overlay ??
+                    selectedImage.analysis.processed_images.original
+                  : selectedImage.analysis?.processed_images.original ??
                 selectedImage.analysisUri,
             }}
             style={styles.preview}
           />
-          <View style={styles.resultBand}>
+          {selectedImage.analysis && (
+            <View style={styles.overlayToggleRow}>
+              <View>
+                <Text style={styles.overlayToggleTitle}>Lesion overlay</Text>
+                <Text style={styles.overlayToggleMeta}>
+                  MA and exudate masks from classical processing
+                </Text>
+              </View>
+              <Switch
+                value={showLesionOverlay}
+                onValueChange={setShowLesionOverlay}
+                disabled={!selectedImage.analysis.processed_images.lesion_overlay}
+                trackColor={{ false: '#CFE3DE', true: '#76D0AE' }}
+                thumbColor={showLesionOverlay ? '#0E7C7B' : '#F8FBFA'}
+              />
+            </View>
+          )}
+          <View
+            style={[
+              styles.resultBand,
+              selectedImage.analysis &&
+                (getScreeningStatus(selectedImage.analysis).referable
+                  ? styles.resultBandReferable
+                  : styles.resultBandNonReferable),
+            ]}
+          >
             <Text style={styles.resultLabel}>
-              {isAnalyzing ? 'Analysis running' : 'Screening result'}
+              {isAnalyzing ? 'Analysis running' : 'Tier 1 screening status'}
             </Text>
             <Text style={styles.resultTitle}>
               {isAnalyzing
-                ? 'Checking image quality'
-                : selectedImage.analysis?.result.classification ??
-                  'Ready to analyze'}
+                ? 'Processing handcrafted retinal features'
+                : selectedImage.analysis
+                  ? getScreeningStatus(selectedImage.analysis).status
+                  : 'Ready to analyze'}
             </Text>
             <Text style={styles.resultText}>
               {isAnalyzing
                 ? 'The backend is checking the centered capture region for blur, brightness, contrast, retinal field visibility, and classical DR features.'
-                : selectedImage.analysis?.result.reason ??
-                  'Run the FastAPI pipeline on the centered capture region to check image quality and extract classical image-processing features.'}
+                : selectedImage.analysis
+                  ? `${getScreeningStatus(selectedImage.analysis).recommendation} ${selectedImage.analysis.result.reason}`
+                  : 'Run the FastAPI pipeline on the centered capture region to check image quality and extract classical image-processing features.'}
             </Text>
             {selectedImage.analysis && (
               <View style={styles.resultSummaryRow}>
                 <View style={styles.stageBadge}>
-                  <Text style={styles.stageBadgeLabel}>Stage</Text>
+                  <Text style={styles.stageBadgeLabel}>Tier 2</Text>
                   <Text style={styles.stageBadgeValue}>
                     {selectedImage.analysis.result.stage ?? 'N/A'}
                   </Text>
                 </View>
                 <Text style={styles.resultProbability}>
-                  DR chance estimate:{' '}
+                  Referable support score:{' '}
                   {formatNumber(
                     selectedImage.analysis.result.dr_probability,
                     0,
                   )}
-                  %
+                  %{'\n'}Stage estimate confidence:{' '}
+                  {formatPercent(selectedImage.analysis.result.confidence)}
                 </Text>
               </View>
             )}
           </View>
+          {isAnalyzing && (
+            <View style={styles.skeletonPanel}>
+              <View style={styles.skeletonLineWide} />
+              <View style={styles.skeletonLine} />
+              <View style={styles.skeletonLineShort} />
+            </View>
+          )}
           {renderBackendStatusCard()}
           {analysisError && (
             <View style={styles.errorPanel}>
@@ -1139,24 +1493,29 @@ export default function App(): React.JSX.Element {
               </Text>
             </View>
             <View style={styles.metricBox}>
-              <Text style={styles.metricLabel}>DR chance</Text>
+              <Text style={styles.metricLabel}>Screening</Text>
               <Text style={styles.metricValue}>
                 {selectedImage.analysis
-                  ? `${formatNumber(
-                      selectedImage.analysis.result.dr_probability,
-                      0,
-                    )}%`
+                  ? getScreeningStatus(selectedImage.analysis).status
                   : 'Waiting'}
               </Text>
             </View>
             <View style={styles.metricBox}>
-              <Text style={styles.metricLabel}>DR stage</Text>
+              <Text style={styles.metricLabel}>Stage estimate</Text>
               <Text style={styles.metricValue}>
                 {selectedImage.analysis?.quality.is_acceptable
                   ? formatStageValue(selectedImage.analysis.result.stage)
                   : selectedImage.analysis
                     ? 'N/A'
                     : 'Waiting'}
+              </Text>
+            </View>
+            <View style={styles.metricBox}>
+              <Text style={styles.metricLabel}>Confidence</Text>
+              <Text style={styles.metricValue}>
+                {selectedImage.analysis
+                  ? formatPercent(selectedImage.analysis.result.confidence)
+                  : 'Waiting'}
               </Text>
             </View>
           </View>
@@ -1211,6 +1570,37 @@ export default function App(): React.JSX.Element {
               </Text>
             </View>
           )}
+          {selectedImage.analysis && renderSpecialistOverride(selectedImage.analysis)}
+          <View style={styles.calibrationPanel}>
+            <Text style={styles.sectionTitle}>Advanced calibration</Text>
+            {renderCalibrationControl('CLAHE clip', 'clahe_clip_limit', 0.8, 5, 0.2)}
+            {renderCalibrationControl(
+              'Exudate percentile',
+              'exudate_percentile',
+              90,
+              99.5,
+              0.5,
+            )}
+            {renderCalibrationControl(
+              'Local bright percentile',
+              'exudate_local_percentile',
+              90,
+              99.8,
+              0.5,
+            )}
+            {selectedImage && (
+              <TouchableOpacity
+                style={[styles.secondaryButton, styles.reprocessButton]}
+                onPress={() => analyzeImage(selectedImage)}
+                disabled={isAnalyzing}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {isAnalyzing ? 'Processing' : 'Re-process'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.primaryButton, styles.buttonFlex]}
@@ -1314,7 +1704,8 @@ export default function App(): React.JSX.Element {
         <Text style={styles.readingText}>
           This project uses enhancement, thresholding, vessel filtering,
           morphology, and handcrafted feature measurements with a supervised
-          tabular classifier rather than CNNs or deep learning.
+          tabular classifier rather than CNNs or deep learning. Its output is a
+          decision-support estimate, not a diagnosis.
         </Text>
       </View>
     </ScrollView>
@@ -1831,6 +2222,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#DCE8E4',
     marginBottom: 14,
   },
+  overlayToggleRow: {
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D8E8E4',
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  overlayToggleTitle: {
+    color: '#12323A',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  overlayToggleMeta: {
+    color: '#5D7378',
+    fontSize: 12,
+    marginTop: 3,
+  },
   resultBand: {
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
@@ -1838,6 +2252,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     marginBottom: 14,
+  },
+  resultBandReferable: {
+    backgroundColor: '#FFF0F1',
+    borderColor: '#F0B7BD',
+  },
+  resultBandNonReferable: {
+    backgroundColor: '#E8F7F0',
+    borderColor: '#A7D8C6',
   },
   resultLabel: {
     color: '#0E7C7B',
@@ -1888,6 +2310,34 @@ const styles = StyleSheet.create({
     color: '#0E5E63',
     fontSize: 15,
     fontWeight: '800',
+    lineHeight: 22,
+  },
+  skeletonPanel: {
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D8E8E4',
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 14,
+    gap: 10,
+  },
+  skeletonLineWide: {
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E6F0ED',
+    width: '92%',
+  },
+  skeletonLine: {
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#EDF5F2',
+    width: '72%',
+  },
+  skeletonLineShort: {
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#F3F8F6',
+    width: '45%',
   },
   errorPanel: {
     borderRadius: 8,
@@ -1989,11 +2439,13 @@ const styles = StyleSheet.create({
   },
   metricGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginBottom: 14,
   },
   metricBox: {
-    flex: 1,
+    flexGrow: 1,
+    width: '48%',
     minHeight: 76,
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
@@ -2029,6 +2481,131 @@ const styles = StyleSheet.create({
     color: '#4E666B',
     fontSize: 14,
     lineHeight: 22,
+  },
+  overridePanel: {
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D8E8E4',
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 14,
+  },
+  overrideSummary: {
+    minHeight: 54,
+    borderRadius: 8,
+    backgroundColor: '#F6FAF8',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  overrideLabel: {
+    color: '#789096',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  overrideValue: {
+    color: '#12323A',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  stageSelector: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  stageOption: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 8,
+    backgroundColor: '#F3F9F7',
+    borderColor: '#CFE3DE',
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stageOptionSelected: {
+    backgroundColor: '#0E7C7B',
+    borderColor: '#0E7C7B',
+  },
+  stageOptionText: {
+    color: '#0E5E63',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  stageOptionTextSelected: {
+    color: '#FFFFFF',
+  },
+  auditText: {
+    color: '#5D7378',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 10,
+  },
+  calibrationPanel: {
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D8E8E4',
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 14,
+  },
+  calibrationRow: {
+    marginBottom: 14,
+  },
+  calibrationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  calibrationLabel: {
+    color: '#4E666B',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  calibrationValue: {
+    color: '#12323A',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  calibrationControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  calibrationTrack: {
+    flex: 1,
+    height: 10,
+    borderRadius: 8,
+    backgroundColor: '#E6F0ED',
+    overflow: 'hidden',
+  },
+  calibrationFill: {
+    height: '100%',
+    borderRadius: 8,
+    backgroundColor: '#0E7C7B',
+  },
+  stepButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#EAF4F1',
+    borderColor: '#CFE3DE',
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepButtonText: {
+    color: '#0E5E63',
+    fontSize: 19,
+    fontWeight: '900',
+  },
+  reprocessButton: {
+    marginTop: 2,
   },
   emptyPanel: {
     minHeight: 220,

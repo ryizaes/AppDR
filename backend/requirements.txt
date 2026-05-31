@@ -6,6 +6,9 @@ opencv-python-headless==4.10.0.84
 pandas==3.0.3
 pydantic==2.10.4
 scikit-learn==1.8.0
+scikit-image==0.25.2
 matplotlib==3.10.9
 seaborn==0.13.2
 imbalanced-learn==0.14.1
+celery==5.6.0
+redis==6.4.0

@@ -1,0 +1,4 @@
+model,best_cv_f1_macro,holdout_f1_macro,holdout_balanced_accuracy,best_params
+RandomForestClassifier,0.5593641905021387,0.5499545097461993,0.5299413180131993,"{'classifier__max_depth': 10, 'classifier__min_samples_split': 5, 'classifier__n_estimators': 200}"
+SVC,0.5756014033470338,0.5124565975850672,0.5135581040523995,"{'classifier__C': 10, 'classifier__kernel': 'rbf'}"
+HistGradientBoostingClassifier,0.5875617013738761,0.5021189195938359,0.49766566306995436,"{'classifier__learning_rate': 0.1, 'classifier__max_iter': 100, 'classifier__max_leaf_nodes': 31}"

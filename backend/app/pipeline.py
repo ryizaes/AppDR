@@ -1,5 +1,7 @@
 import base64
+import json
 import pickle
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -7,7 +9,13 @@ from typing import Any
 import cv2
 import numpy as np
 
-from app.schemas import FeatureReport, QualityReport, ScreeningResult
+import config as ml_config
+from app.schemas import AnalyzeResponse, FeatureReport, QualityReport, ScreeningResult
+from feature_extraction import (
+    FeatureExtractionPayload,
+    extract_feature_payload,
+    mask_to_regions as feature_mask_to_regions,
+)
 
 
 @dataclass
@@ -16,6 +24,8 @@ class PipelineOutput:
     features: FeatureReport
     result: ScreeningResult
     processed_images: dict[str, str]
+    lesion_regions: dict[str, list[dict[str, Any]]]
+    image_shape: dict[str, int]
 
 
 @dataclass
@@ -81,14 +91,8 @@ FEATURE_VECTOR_NAMES = [
     "glcm_energy",
 ]
 ML_MODEL_PATH = Path(__file__).resolve().parents[1] / "results" / "best_model.pkl"
-ML_FEATURE_NAMES = [
-    "ma_count",
-    "exudate_area",
-    "vessel_density",
-    "glcm_contrast",
-    "glcm_homogeneity",
-    "glcm_energy",
-]
+ML_METADATA_PATH = Path(__file__).resolve().parents[1] / "results" / "best_model_metadata.json"
+ML_FEATURE_NAMES = ml_config.FEATURE_NAMES
 ML_STAGE_LABELS = {
     0: "Stage 0: No DR",
     1: "Stage 1: Mild NPDR",
@@ -107,13 +111,31 @@ SPATIAL_FEATURE_KINDS = (
 )
 _SUPERVISED_MODEL: Any | None = None
 _SUPERVISED_MODEL_LOAD_ATTEMPTED = False
+_SUPERVISED_MODEL_FEATURE_NAMES: list[str] | None = None
+_SUPERVISED_MODEL_METADATA: dict[str, Any] = {}
 
 
-def analyze_image(image_bytes: bytes, include_processed_images: bool = True) -> PipelineOutput:
+DEFAULT_CALIBRATION = {
+    "clahe_clip_limit": 2.0,
+    "exudate_percentile": 97.5,
+    "exudate_local_percentile": 98.0,
+}
+
+
+def analyze_image(
+    image_bytes: bytes,
+    include_processed_images: bool = True,
+    calibration: dict[str, float] | None = None,
+) -> PipelineOutput:
+    calibration_values = normalize_calibration(calibration)
     image = prepare_analysis_image(decode_image(image_bytes))
     stage0 = stage0_fov_and_optic_disc_masking(image)
     quality = assess_quality(image, image[:, :, 1], stage0.fov_mask)
-    preprocessed = stage1_preprocess_green_channel(image, stage0.fov_mask)
+    preprocessed = stage1_preprocess_green_channel(
+        image,
+        stage0.fov_mask,
+        clahe_clip_limit=calibration_values["clahe_clip_limit"],
+    )
     vessels = stage2_segment_vessels(preprocessed.denoised, stage0.fov_mask)
     lesions = stage3_extract_lesions(
         image=image,
@@ -121,7 +143,11 @@ def analyze_image(image_bytes: bytes, include_processed_images: bool = True) -> 
         fov_mask=stage0.fov_mask,
         optic_disc_mask=stage0.optic_disc_mask,
         vessels=vessels.vessels,
+        calibration=calibration_values,
     )
+    # Use the same resized/cropped frame as the dashboard overlays so lesion
+    # coordinates align with processed_images. Raw upload bytes can differ in size.
+    expanded_payload = extract_payload_from_image(image, calibration_values)
     features = stage4_extract_features(
         preprocessed=preprocessed.denoised,
         vessels=vessels.vessels,
@@ -131,6 +157,7 @@ def analyze_image(image_bytes: bytes, include_processed_images: bool = True) -> 
         fov_mask=stage0.fov_mask,
         optic_disc_detected=stage0.optic_disc_contour is not None,
     )
+    features.expanded_features = expanded_payload.features
     quality = add_feature_quality_warnings(quality, features)
     result = stage5_classify(features, quality)
     processed_images: dict[str, str] = {}
@@ -162,6 +189,15 @@ def analyze_image(image_bytes: bytes, include_processed_images: bool = True) -> 
         features=features,
         result=result,
         processed_images=processed_images,
+        lesion_regions=lesion_regions_from_masks(
+            vessels=vessels.vessels,
+            microaneurysms=lesions.microaneurysms,
+            exudates=lesions.exudates,
+        ),
+        image_shape={
+            "height": int(image.shape[0]),
+            "width": int(image.shape[1]),
+        },
     )
 
 
@@ -169,12 +205,74 @@ def process_image_path(image_path: str | Path) -> dict[str, Any]:
     path = Path(image_path)
     output = analyze_image(path.read_bytes())
 
+    return build_analyze_response(path.name, output).model_dump()
+
+
+def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResponse:
+    return AnalyzeResponse(
+        filename=filename or "uploaded-image",
+        quality=output.quality,
+        features=output.features,
+        result=output.result,
+        processed_images=output.processed_images,
+        lesion_regions=output.lesion_regions,
+        image_shape=output.image_shape,
+    )
+
+
+def normalize_calibration(calibration: dict[str, float] | None) -> dict[str, float]:
+    values = dict(DEFAULT_CALIBRATION)
+
+    if calibration:
+        for key in values:
+            if key in calibration:
+                values[key] = float(calibration[key])
+
+    values["clahe_clip_limit"] = float(np.clip(values["clahe_clip_limit"], 0.8, 5.0))
+    values["exudate_percentile"] = float(np.clip(values["exudate_percentile"], 90.0, 99.5))
+    values["exudate_local_percentile"] = float(
+        np.clip(values["exudate_local_percentile"], 90.0, 99.8),
+    )
+    return values
+
+
+def extract_payload_from_image(
+    image: np.ndarray,
+    calibration: dict[str, float] | None = None,
+) -> FeatureExtractionPayload:
+    success, buffer = cv2.imencode(".png", image)
+
+    if not success:
+        raise ValueError("Failed to encode prepared image for feature extraction.")
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
+        temp_file.write(buffer.tobytes())
+        temp_path = Path(temp_file.name)
+
+    try:
+        calibration_values = normalize_calibration(calibration)
+        return extract_feature_payload(
+            temp_path,
+            clahe_clip_limit=calibration_values["clahe_clip_limit"],
+            exudate_percentile=calibration_values["exudate_percentile"],
+            exudate_local_percentile=calibration_values["exudate_local_percentile"],
+        )
+    finally:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def lesion_regions_from_masks(
+    vessels: np.ndarray,
+    microaneurysms: np.ndarray,
+    exudates: np.ndarray,
+) -> dict[str, list[dict[str, Any]]]:
     return {
-        "filename": path.name,
-        "quality": output.quality.model_dump(),
-        "features": output.features.model_dump(),
-        "result": output.result.model_dump(),
-        "processed_images": output.processed_images,
+        "microaneurysms": feature_mask_to_regions(microaneurysms, min_area=1),
+        "exudates": feature_mask_to_regions(exudates, min_area=ml_config.EXUDATE_MIN_AREA),
+        "vessels": feature_mask_to_regions(vessels, min_area=20),
     }
 
 
@@ -307,10 +405,14 @@ def detect_optic_disc_mask(
     return optic_disc_mask, best_contour
 
 
-def stage1_preprocess_green_channel(image: np.ndarray, fov_mask: np.ndarray) -> PreprocessedImage:
+def stage1_preprocess_green_channel(
+    image: np.ndarray,
+    fov_mask: np.ndarray,
+    clahe_clip_limit: float = 2.0,
+) -> PreprocessedImage:
     green = image[:, :, 1]
     green_for_clahe = fill_outside_mask(green, fov_mask)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=float(clahe_clip_limit), tileGridSize=(8, 8))
     enhanced = clahe.apply(green_for_clahe)
     denoised = cv2.medianBlur(enhanced, 3)
     enhanced[fov_mask == 0] = 0
@@ -354,7 +456,9 @@ def stage3_extract_lesions(
     fov_mask: np.ndarray,
     optic_disc_mask: np.ndarray,
     vessels: np.ndarray,
+    calibration: dict[str, float] | None = None,
 ) -> LesionMasks:
+    calibration_values = normalize_calibration(calibration)
     microaneurysms, microaneurysm_candidates = detect_microaneurysms(
         image=image,
         preprocessed=preprocessed,
@@ -367,6 +471,8 @@ def stage3_extract_lesions(
         fov_mask=fov_mask,
         optic_disc_mask=optic_disc_mask,
         vessels=vessels,
+        exudate_percentile=calibration_values["exudate_percentile"],
+        exudate_local_percentile=calibration_values["exudate_local_percentile"],
     )
 
     return LesionMasks(
@@ -491,9 +597,12 @@ def detect_exudates_lab_otsu(
     fov_mask: np.ndarray,
     optic_disc_mask: np.ndarray,
     vessels: np.ndarray,
+    exudate_percentile: float = 97.5,
+    exudate_local_percentile: float = 98.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
     lightness = lab[:, :, 0]
+    b_channel = lab[:, :, 2]
     local_bright = cv2.morphologyEx(lightness, cv2.MORPH_TOPHAT, disk_kernel(8))
     vessel_exclusion = cv2.dilate(vessels, disk_kernel(1), iterations=1)
     od_exclusion = cv2.dilate(optic_disc_mask, disk_kernel(12), iterations=1)
@@ -506,14 +615,17 @@ def detect_exudates_lab_otsu(
 
     threshold = max(
         masked_otsu_threshold(valid_values),
-        float(np.percentile(valid_values, 97.5)),
+        float(np.percentile(valid_values, exudate_percentile)),
     )
     local_values = local_bright[valid_mask > 0]
-    local_threshold = max(14.0, float(np.percentile(local_values, 98.0)))
+    local_threshold = max(14.0, float(np.percentile(local_values, exudate_local_percentile)))
+    b_values = b_channel[valid_mask > 0]
+    b_threshold = max(128.0, float(np.percentile(b_values, ml_config.EXUDATE_B_PERCENTILE)))
     candidates = np.zeros_like(lightness)
     candidates[
         (lightness >= threshold)
         & (local_bright >= local_threshold)
+        & (b_channel >= b_threshold)
         & (valid_mask > 0)
     ] = 255
     candidates = cv2.morphologyEx(candidates, cv2.MORPH_CLOSE, disk_kernel(2))
@@ -711,6 +823,7 @@ def stage5_classify(features: FeatureReport, quality: QualityReport) -> Screenin
                 "Screening support only. Retake with a clear retinal image before "
                 "reviewing diabetic retinopathy features."
             ),
+            screening=screening_tier_for_stage(None),
         )
 
     supervised_result = classify_by_supervised_feature_model(features)
@@ -718,8 +831,9 @@ def stage5_classify(features: FeatureReport, quality: QualityReport) -> Screenin
         return supervised_result
 
     stage, label, reason = classify_by_strict_stage_rules(features)
-    referable = stage > 0
-    score = deterministic_stage_score(stage, features.pathology_area_index)
+    screening = screening_tier_for_stage(stage)
+    referable = bool(screening["referable"])
+    score = fallback_referable_score(stage, features.pathology_area_index)
 
     return ScreeningResult(
         classification=label,
@@ -733,6 +847,7 @@ def stage5_classify(features: FeatureReport, quality: QualityReport) -> Screenin
             "medical diagnosis and must be reviewed by a qualified eye-care professional."
         ),
         model_type="rule_based",
+        screening=screening,
     )
 
 
@@ -742,12 +857,17 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
     if model is None:
         return None
 
-    feature_vector = np.array([supervised_feature_vector_from_report(features)], dtype=np.float64)
+    feature_names = supervised_model_feature_names()
+    feature_vector = np.array(
+        [supervised_feature_vector_from_report(features, feature_names)],
+        dtype=np.float64,
+    )
     stage = int(model.predict(feature_vector)[0])
     probabilities = supervised_probabilities(model, feature_vector)
     confidence = max(probabilities.values()) if probabilities else None
-    dr_probability = supervised_dr_probability(stage, probabilities)
+    dr_probability = supervised_referable_probability(stage, probabilities)
     label = ML_STAGE_LABELS.get(stage, f"Stage {stage}: DR")
+    screening = screening_tier_for_stage(stage)
 
     feature_summary = (
         f"MA={features.microaneurysm_count}, "
@@ -755,17 +875,18 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
         f"vessel density={features.vessel_density:.4f}, "
         f"GLCM contrast={features.glcm_contrast:.2f}"
     )
+    model_name = supervised_model_display_name()
     reason = (
-        "RandomForestClassifier predicted the stage from the six handcrafted "
-        f"retinal features ({feature_summary})."
+        f"{model_name} prepared a decision-support stage estimate from "
+        f"{len(feature_names)} handcrafted retinal measurements ({feature_summary})."
     )
 
     if confidence is not None:
-        reason += f" Model confidence for the selected stage is {confidence:.2%}."
+        reason += f" Estimated-stage confidence is {confidence:.2%}."
 
     return ScreeningResult(
-        classification=label,
-        referable=stage > 0,
+        classification=f"{screening['status']}: {label}",
+        referable=bool(screening["referable"]),
         dr_probability=dr_probability,
         stage=stage,
         stage_label=label,
@@ -773,21 +894,27 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
         disclaimer=(
             "Supervised handcrafted-feature screening support only. This result "
             "is not a medical diagnosis and must be reviewed by a qualified "
-            "eye-care professional."
+            "eye-care professional. Severe and proliferative disease may be "
+            "under-called on some images, so clinician review and manual override "
+            "are required."
         ),
-        model_type="random_forest_handcrafted_features",
+        model_type=f"{model_name}_handcrafted_features",
         confidence=confidence,
         probabilities={str(label): value for label, value in probabilities.items()},
+        screening=screening,
     )
 
 
 def load_supervised_model() -> Any | None:
-    global _SUPERVISED_MODEL, _SUPERVISED_MODEL_LOAD_ATTEMPTED
+    global _SUPERVISED_MODEL, _SUPERVISED_MODEL_FEATURE_NAMES
+    global _SUPERVISED_MODEL_LOAD_ATTEMPTED, _SUPERVISED_MODEL_METADATA
 
     if _SUPERVISED_MODEL_LOAD_ATTEMPTED:
         return _SUPERVISED_MODEL
 
     _SUPERVISED_MODEL_LOAD_ATTEMPTED = True
+    _SUPERVISED_MODEL_METADATA = load_supervised_metadata()
+    _SUPERVISED_MODEL_FEATURE_NAMES = metadata_feature_names(_SUPERVISED_MODEL_METADATA)
 
     if not ML_MODEL_PATH.exists():
         return None
@@ -801,14 +928,67 @@ def load_supervised_model() -> Any | None:
     return _SUPERVISED_MODEL
 
 
-def supervised_feature_vector_from_report(features: FeatureReport) -> list[float]:
+def load_supervised_metadata() -> dict[str, Any]:
+    if not ML_METADATA_PATH.exists():
+        return {}
+
+    try:
+        with ML_METADATA_PATH.open("r", encoding="utf-8") as file:
+            metadata = json.load(file)
+    except Exception:
+        return {}
+
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def metadata_feature_names(metadata: dict[str, Any]) -> list[str]:
+    names = metadata.get("feature_names")
+
+    if isinstance(names, list) and all(isinstance(name, str) for name in names):
+        return list(names)
+
+    return list(ML_FEATURE_NAMES)
+
+
+def supervised_model_feature_names() -> list[str]:
+    if _SUPERVISED_MODEL_FEATURE_NAMES:
+        return _SUPERVISED_MODEL_FEATURE_NAMES
+
+    return list(ML_FEATURE_NAMES)
+
+
+def supervised_model_display_name() -> str:
+    name = _SUPERVISED_MODEL_METADATA.get("best_model_name", "ScikitLearnClassifier")
+    return str(name)
+
+
+def supervised_feature_vector_from_report(
+    features: FeatureReport,
+    feature_names: list[str],
+) -> list[float]:
+    expanded = dict(features.expanded_features or {})
+    fundus_area = max(float(features.fundus_area), 1.0)
+
+    fallback_values = {
+        "ma_count": float(features.microaneurysm_count),
+        "ma_area": float(features.microaneurysm_area),
+        "ma_density": float(features.microaneurysm_area) / fundus_area,
+        "ma_mean_area": float(features.microaneurysm_area)
+        / max(float(features.microaneurysm_count), 1.0),
+        "exudate_count": float(features.exudate_count),
+        "exudate_area": float(features.exudate_area),
+        "exudate_density": float(features.exudate_area) / fundus_area,
+        "exudate_mean_area": float(features.exudate_area)
+        / max(float(features.exudate_count), 1.0),
+        "vessel_density": float(features.vessel_density),
+        "glcm_contrast": float(features.glcm_contrast),
+        "glcm_homogeneity": float(features.glcm_homogeneity),
+        "glcm_energy": float(features.glcm_energy),
+    }
+
     return [
-        float(features.microaneurysm_count),
-        float(features.exudate_area),
-        float(features.vessel_density),
-        float(features.glcm_contrast),
-        float(features.glcm_homogeneity),
-        float(features.glcm_energy),
+        float(expanded.get(name, fallback_values.get(name, 0.0)))
+        for name in feature_names
     ]
 
 
@@ -817,19 +997,71 @@ def supervised_probabilities(model: Any, feature_vector: np.ndarray) -> dict[int
         return {}
 
     values = model.predict_proba(feature_vector)[0]
-    classes = getattr(model, "classes_", list(ML_STAGE_LABELS.keys()))
+    classes = model_classes(model)
     return {
         int(label): float(probability)
         for label, probability in zip(classes, values)
     }
 
 
-def supervised_dr_probability(stage: int, probabilities: dict[int, float]) -> float:
-    if probabilities:
-        non_dr_probability = probabilities.get(0, 0.0)
-        return round(float(np.clip((1.0 - non_dr_probability) * 100.0, 0.0, 100.0)), 1)
+def model_classes(model: Any) -> list[int]:
+    classes = getattr(model, "classes_", None)
 
-    return deterministic_stage_score(stage, 0.0)
+    if classes is None and hasattr(model, "named_steps"):
+        classifier = model.named_steps.get("classifier")
+        classes = getattr(classifier, "classes_", None)
+
+    if classes is None:
+        return list(ML_STAGE_LABELS.keys())
+
+    return [int(label) for label in classes]
+
+
+def supervised_referable_probability(stage: int, probabilities: dict[int, float]) -> float:
+    if probabilities:
+        referable_probability = sum(
+            probability
+            for label, probability in probabilities.items()
+            if int(label) >= 2
+        )
+        return round(float(np.clip(referable_probability * 100.0, 0.0, 100.0)), 1)
+
+    return fallback_referable_score(stage, 0.0)
+
+
+def fallback_referable_score(stage: int, pathology_area_index: float) -> float:
+    if stage < 2:
+        return 0.0
+
+    return deterministic_stage_score(stage, pathology_area_index)
+
+
+def screening_tier_for_stage(stage: int | None) -> dict[str, Any]:
+    if stage is None:
+        return {
+            "status": "Unstageable",
+            "referable": False,
+            "rule": "Quality gate failed",
+            "recommendation": "Retake the retinal image before clinician review.",
+        }
+
+    if stage >= 2:
+        return {
+            "status": "Referable",
+            "referable": True,
+            "rule": "Stages 2-4 are mapped to referable screening-support review.",
+            "recommendation": "Forward the case for eye-care specialist review.",
+        }
+
+    return {
+        "status": "Non-Referable",
+        "referable": False,
+        "rule": "Stages 0-1 are mapped to non-referable screening-support review.",
+        "recommendation": (
+            "Document the estimate only after clinician review; continue routine "
+            "screening if the clinician agrees."
+        ),
+    }
 
 
 def classify_by_strict_stage_rules(features: FeatureReport) -> tuple[int, str, str]:

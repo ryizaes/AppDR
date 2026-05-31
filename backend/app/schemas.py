@@ -35,6 +35,33 @@ class FeatureReport(BaseModel):
     glcm_homogeneity: float = 0.0
     glcm_energy: float = 0.0
     spatial_features: list[float] = Field(default_factory=list)
+    expanded_features: dict[str, float] = Field(default_factory=dict)
+
+
+class LesionBox(BaseModel):
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+class LesionPoint(BaseModel):
+    x: float
+    y: float
+
+
+class LesionRegion(BaseModel):
+    bbox: LesionBox
+    centroid: LesionPoint
+    area: float
+    contour: list[LesionPoint] = Field(default_factory=list)
+
+
+class ScreeningTier(BaseModel):
+    status: str
+    referable: bool
+    rule: str
+    recommendation: str
 
 
 class ScreeningResult(BaseModel):
@@ -48,6 +75,7 @@ class ScreeningResult(BaseModel):
     model_type: str = "rule_based"
     confidence: float | None = None
     probabilities: dict[str, float] = Field(default_factory=dict)
+    screening: ScreeningTier | None = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -56,3 +84,19 @@ class AnalyzeResponse(BaseModel):
     features: FeatureReport
     result: ScreeningResult
     processed_images: dict[str, str]
+    lesion_regions: dict[str, list[LesionRegion]] = Field(default_factory=dict)
+    image_shape: dict[str, int] = Field(default_factory=dict)
+
+
+class AnalyzeTaskResponse(BaseModel):
+    task_id: str
+    status_url: str
+    message: str
+
+
+class AnalyzeTaskStatusResponse(BaseModel):
+    task_id: str
+    state: str
+    message: str
+    result: AnalyzeResponse | None = None
+    error: str | None = None

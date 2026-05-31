@@ -1,0 +1,43 @@
+{
+  "model_name": "HistGradientBoostingClassifier",
+  "accuracy": 0.747612551159618,
+  "precision_macro": 0.5146980152001673,
+  "recall_macro": 0.49766566306995436,
+  "f1_macro": 0.5021189195938359,
+  "balanced_accuracy": 0.49766566306995436,
+  "cohen_kappa": 0.6119950900304155,
+  "medical_metrics": {
+    "0": {
+      "stage_name": "No DR",
+      "sensitivity_tpr": 0.9695290858725761,
+      "specificity_tnr": 0.9489247311827957
+    },
+    "1": {
+      "stage_name": "Mild NPDR",
+      "sensitivity_tpr": 0.43243243243243246,
+      "specificity_tnr": 0.9453717754172989
+    },
+    "2": {
+      "stage_name": "Moderate NPDR",
+      "sensitivity_tpr": 0.73,
+      "specificity_tnr": 0.8405253283302064
+    },
+    "3": {
+      "stage_name": "Severe NPDR",
+      "sensitivity_tpr": 0.05128205128205128,
+      "specificity_tnr": 0.968299711815562
+    },
+    "4": {
+      "stage_name": "Proliferative DR",
+      "sensitivity_tpr": 0.3050847457627119,
+      "specificity_tnr": 0.9658753709198813
+    }
+  },
+  "roc_auc": {
+    "0": 0.9847049712566646,
+    "1": 0.8707091006028791,
+    "2": 0.9028705440900564,
+    "3": 0.8658464494199364,
+    "4": 0.8616154503847507
+  }
+}

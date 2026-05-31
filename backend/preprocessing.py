@@ -24,6 +24,7 @@ def preprocess_retinal_image(
     image_path: str | Path,
     debug: bool = False,
     debug_dir: str | Path | None = None,
+    clahe_clip_limit: float | None = None,
 ) -> PreprocessingResult:
     """Load and preprocess one fundus image for classical feature extraction."""
     original = load_retinal_image(image_path)
@@ -34,7 +35,7 @@ def preprocess_retinal_image(
     green = normalized[:, :, 1]
     green_filled = fill_outside_mask(green, fov_mask)
     illumination_corrected = normalize_illumination(green_filled, fov_mask)
-    clahe_green = apply_clahe(illumination_corrected)
+    clahe_green = apply_clahe(illumination_corrected, clip_limit=clahe_clip_limit)
     denoised = denoise_green_channel(clahe_green)
     denoised[fov_mask == 0] = 0
 
@@ -187,9 +188,9 @@ def normalize_illumination(green: np.ndarray, fov_mask: np.ndarray) -> np.ndarra
     return corrected
 
 
-def apply_clahe(gray: np.ndarray) -> np.ndarray:
+def apply_clahe(gray: np.ndarray, clip_limit: float | None = None) -> np.ndarray:
     clahe = cv2.createCLAHE(
-        clipLimit=config.CLAHE_CLIP_LIMIT,
+        clipLimit=config.CLAHE_CLIP_LIMIT if clip_limit is None else float(clip_limit),
         tileGridSize=config.CLAHE_TILE_GRID_SIZE,
     )
     return clahe.apply(gray)

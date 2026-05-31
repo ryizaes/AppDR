@@ -1,5 +1,6 @@
 import argparse
 import csv
+import json
 import pickle
 from pathlib import Path
 from typing import Any
@@ -188,16 +189,18 @@ def save_feature_importance(
     model: Any,
     output_png: str | Path,
     output_csv: str | Path | None = None,
+    feature_names: list[str] | None = None,
 ) -> list[dict[str, float | str]]:
     classifier = model.named_steps.get("classifier") if hasattr(model, "named_steps") else model
     importances = getattr(classifier, "feature_importances_", None)
     if importances is None:
         return []
 
+    names = feature_names or config.FEATURE_NAMES
     rows = sorted(
         (
             {"feature": feature, "importance": float(importance)}
-            for feature, importance in zip(config.FEATURE_NAMES, importances)
+            for feature, importance in zip(names, importances)
         ),
         key=lambda row: float(row["importance"]),
         reverse=True,
@@ -281,7 +284,8 @@ def evaluate_saved_model(
     results_dir: str | Path = config.RESULTS_DIR,
 ) -> dict[str, Any]:
     table = read_feature_table(features_csv)
-    x_values = table[config.FEATURE_NAMES].to_numpy(dtype=np.float64)
+    feature_names = load_model_feature_names()
+    x_values = table[feature_names].to_numpy(dtype=np.float64)
     y_values = table["label"].to_numpy(dtype=np.int64)
     _, x_test, _, y_test = train_test_split(
         x_values,
@@ -293,6 +297,22 @@ def evaluate_saved_model(
     with Path(model_path).open("rb") as file:
         model = pickle.load(file)
     return evaluate_model(model, x_test, y_test, results_dir=results_dir)
+
+
+def load_model_feature_names(
+    metadata_path: str | Path = config.METADATA_PATH,
+) -> list[str]:
+    try:
+        with Path(metadata_path).open("r", encoding="utf-8") as file:
+            metadata = json.load(file)
+    except Exception:
+        return list(config.FEATURE_NAMES)
+
+    names = metadata.get("feature_names") if isinstance(metadata, dict) else None
+    if isinstance(names, list) and all(isinstance(name, str) for name in names):
+        return list(names)
+
+    return list(config.FEATURE_NAMES)
 
 
 def parse_args() -> argparse.Namespace:
