@@ -64,20 +64,34 @@ type SourceCodeModule = {
 
 type BackendConnectionState = 'idle' | 'checking' | 'connected' | 'offline';
 
+type BackendModelStatus = {
+  dual_tier_ready?: boolean;
+  multiclass_loaded?: boolean;
+  binary_loaded?: boolean;
+  multiclass_model?: string | null;
+  binary_model?: string | null;
+};
+
 type BackendStatus = {
   state: BackendConnectionState;
   endpoint: string | null;
   message: string;
   checkedAt?: string;
+  models?: BackendModelStatus;
 };
 
 type QualityReport = {
   is_acceptable: boolean;
   blur_score: number;
+  sharpness: number;
   brightness_mean: number;
   contrast_std: number;
+  signal_to_noise_ratio: number;
+  quality_score: number;
+  quality_label: string;
   fundus_area_ratio: number;
   warnings: string[];
+  retake_recommendations: string[];
 };
 
 type FeatureReport = {
@@ -139,8 +153,23 @@ type ScreeningResult = {
   disclaimer: string;
   model_type?: string;
   confidence?: number | null;
+  confidence_label: string;
   probabilities?: Record<string, number>;
   screening?: ScreeningTier | null;
+  screening_recommendation: string;
+};
+
+type DetectionFinding = {
+  label: string;
+  detected: boolean;
+};
+
+type AnalysisHistoryEntry = {
+  image_id: string;
+  date_analyzed: string;
+  dr_stage: number | null;
+  confidence_level: string;
+  screening_recommendation: string;
 };
 
 type AnalyzeResponse = {
@@ -149,6 +178,8 @@ type AnalyzeResponse = {
   features: FeatureReport;
   result: ScreeningResult;
   processed_images: Record<string, string>;
+  detected_findings?: DetectionFinding[];
+  history_entry?: AnalysisHistoryEntry | null;
   lesion_regions?: Record<string, LesionRegion[]>;
   image_shape?: Record<string, number>;
 };
@@ -167,12 +198,6 @@ type AnalyzeTaskStatusResponse = {
   error: string | null;
 };
 
-type CalibrationSettings = {
-  clahe_clip_limit: number;
-  exudate_percentile: number;
-  exudate_local_percentile: number;
-};
-
 const gallerySaver = NativeModules.DRGallerySaver as
   | GallerySaverModule
   | undefined;
@@ -189,12 +214,14 @@ const ANALYZE_TIMEOUT_MS = 25000;
 const STATUS_POLL_INTERVAL_MS = 1500;
 const STATUS_TIMEOUT_MS = 180000;
 const ANALYSIS_CROP_SCALE = 1;
-const DEFAULT_CALIBRATION: CalibrationSettings = {
-  clahe_clip_limit: 2,
-  exudate_percentile: 97.5,
-  exudate_local_percentile: 98,
-};
 const STAGE_OPTIONS = [0, 1, 2, 3, 4];
+const STAGE_PROBABILITY_ORDER = [
+  'No DR',
+  'Mild NPDR',
+  'Moderate NPDR',
+  'Severe NPDR',
+  'Proliferative DR',
+];
 
 const isLoopbackHost = (hostname: string): boolean =>
   ['localhost', '127.0.0.1', '::1'].includes(hostname);
@@ -351,14 +378,6 @@ const isAnalyzeTaskResponse = (value: unknown): value is AnalyzeTaskResponse =>
   'task_id' in value &&
   'status_url' in value;
 
-const clampNumber = (value: number, min: number, max: number): number =>
-  Math.max(min, Math.min(max, value));
-
-const formatPercent = (value: number | null | undefined, decimals = 0): string =>
-  value === null || value === undefined
-    ? 'N/A'
-    : `${formatNumber(value * 100, decimals)}%`;
-
 const getScreeningStatus = (analysis: AnalyzeResponse): ScreeningTier => {
   if (analysis.result.screening) {
     return analysis.result.screening;
@@ -369,9 +388,64 @@ const getScreeningStatus = (analysis: AnalyzeResponse): ScreeningTier => {
     referable: analysis.result.referable,
     rule: 'Fallback screening mapping from the returned stage.',
     recommendation: analysis.result.referable
-      ? 'Forward the case for eye-care specialist review.'
-      : 'Document the finding and continue routine screening review.',
+      ? 'Referable diabetic retinopathy detected. Specialist evaluation recommended.'
+      : 'No significant referable diabetic retinopathy findings detected. Routine ophthalmology follow-up recommended after clinician review.',
   };
+};
+
+const getConfidenceLabel = (analysis: AnalyzeResponse): string =>
+  analysis.result.confidence_label ??
+  (analysis.result.confidence !== null &&
+  analysis.result.confidence !== undefined &&
+  analysis.result.confidence >= 0.75
+    ? 'High Confidence'
+    : analysis.result.confidence !== null &&
+        analysis.result.confidence !== undefined &&
+        analysis.result.confidence >= 0.45
+      ? 'Medium Confidence'
+      : 'Low Confidence');
+
+const isRuleBasedResult = (result: ScreeningResult): boolean =>
+  !result.model_type || result.model_type === 'rule_based';
+
+const getModelTypeLabel = (modelType?: string): string => {
+  switch (modelType) {
+    case 'dual_tier_handcrafted_features':
+      return 'Dual-tier ML (XGBoost staging + Stacking Ensemble screening)';
+    case 'rule_based':
+      return 'Rule-based fallback';
+    default:
+      return modelType?.replace(/_/g, ' ') ?? 'Unknown model';
+  }
+};
+
+const formatPercent = (value: number): string =>
+  `${formatNumber(value, 1)}%`;
+
+const isHealthResponse = (
+  value: unknown,
+): value is { status: string; models?: BackendModelStatus } =>
+  typeof value === 'object' && value !== null && 'status' in value;
+
+const getBackendModelSummary = (models?: BackendModelStatus): string | null => {
+  if (!models) {
+    return null;
+  }
+
+  if (models.dual_tier_ready) {
+    return `ML models loaded (${models.multiclass_model ?? 'staging'} + ${models.binary_model ?? 'screening'}).`;
+  }
+
+  if (models.multiclass_loaded || models.binary_loaded) {
+    const loaded = [
+      models.multiclass_loaded ? models.multiclass_model ?? 'staging model' : null,
+      models.binary_loaded ? models.binary_model ?? 'screening model' : null,
+    ].filter(Boolean);
+
+    return `Partial ML load: ${loaded.join(' + ')}.`;
+  }
+
+  return 'No trained ML models loaded on the backend.';
 };
 
 const pollAnalysisTask = async (
@@ -415,10 +489,7 @@ const pollAnalysisTask = async (
   throw new Error('Analysis task timed out while waiting for the backend.');
 };
 
-const createAnalyzeFormData = (
-  image: CapturedImage,
-  calibration: CalibrationSettings,
-): FormData => {
+const createAnalyzeFormData = (image: CapturedImage): FormData => {
   const formData = new FormData();
   formData.append(
     'file',
@@ -427,12 +498,6 @@ const createAnalyzeFormData = (
       name: getFileName(image.analysisPath),
       type: image.mimeType,
     } as unknown as Blob,
-  );
-  formData.append('clahe_clip_limit', `${calibration.clahe_clip_limit}`);
-  formData.append('exudate_percentile', `${calibration.exudate_percentile}`);
-  formData.append(
-    'exudate_local_percentile',
-    `${calibration.exudate_local_percentile}`,
   );
 
   return formData;
@@ -470,8 +535,6 @@ export default function App(): React.JSX.Element {
   const [showLesionOverlay, setShowLesionOverlay] = useState(true);
   const [manualStage, setManualStage] = useState<number | null>(null);
   const [overrideConfirmed, setOverrideConfirmed] = useState(false);
-  const [calibration, setCalibration] =
-    useState<CalibrationSettings>(DEFAULT_CALIBRATION);
 
   useEffect(() => {
     setShowLesionOverlay(true);
@@ -619,12 +682,17 @@ export default function App(): React.JSX.Element {
           throw new Error(`Backend health check returned ${response.status}.`);
         }
 
+        const healthBody = await parseJsonResponse(response);
+        const models = isHealthResponse(healthBody) ? healthBody.models : undefined;
+        const modelSummary = getBackendModelSummary(models);
+
         setActiveApiBaseUrl(apiBaseUrl);
         setBackendStatus({
           state: 'connected',
           endpoint: apiBaseUrl,
-          message: 'Analysis backend is connected.',
+          message: modelSummary ?? 'Analysis backend is connected.',
           checkedAt: formatCheckedAt(),
+          models,
         });
         return apiBaseUrl;
       } catch (error) {
@@ -666,7 +734,7 @@ export default function App(): React.JSX.Element {
               `${apiBaseUrl}/analyze`,
               {
                 method: 'POST',
-                body: createAnalyzeFormData(image, calibration),
+                body: createAnalyzeFormData(image),
               },
               ANALYZE_TIMEOUT_MS,
             );
@@ -730,7 +798,7 @@ export default function App(): React.JSX.Element {
         setIsAnalyzing(false);
       }
     },
-    [activeApiBaseUrl, applyAnalysisToImage, calibration],
+    [activeApiBaseUrl, applyAnalysisToImage],
   );
 
   const takePhoto = async (): Promise<void> => {
@@ -943,8 +1011,8 @@ export default function App(): React.JSX.Element {
         <Text style={styles.brandLabel}>DR Screening</Text>
         <Text style={styles.brandTitle}>Clinician Review Support</Text>
         <Text style={styles.brandSubtitle}>
-          Classical retinal image processing for clinician-reviewed screening
-          support.
+          Classical retinal image processing with dual-tier supervised ML for
+          clinician-reviewed screening support.
         </Text>
       </View>
 
@@ -1149,65 +1217,6 @@ export default function App(): React.JSX.Element {
     );
   };
 
-  const updateCalibrationValue = useCallback(
-    (key: keyof CalibrationSettings, delta: number, min: number, max: number) => {
-      setCalibration(current => ({
-        ...current,
-        [key]: Number(
-          clampNumber(current[key] + delta, min, max).toFixed(2),
-        ),
-      }));
-    },
-    [],
-  );
-
-  const renderCalibrationControl = (
-    label: string,
-    key: keyof CalibrationSettings,
-    min: number,
-    max: number,
-    step: number,
-    decimals = 1,
-  ) => {
-    const value = calibration[key];
-    const ratio = ((value - min) / (max - min)) * 100;
-
-    return (
-      <View style={styles.calibrationRow} key={key}>
-        <View style={styles.calibrationHeader}>
-          <Text style={styles.calibrationLabel}>{label}</Text>
-          <Text style={styles.calibrationValue}>
-            {formatNumber(value, decimals)}
-          </Text>
-        </View>
-        <View style={styles.calibrationControls}>
-          <TouchableOpacity
-            style={styles.stepButton}
-            onPress={() => updateCalibrationValue(key, -step, min, max)}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.stepButtonText}>-</Text>
-          </TouchableOpacity>
-          <View style={styles.calibrationTrack}>
-            <View
-              style={[
-                styles.calibrationFill,
-                { width: `${clampNumber(ratio, 0, 100)}%` },
-              ]}
-            />
-          </View>
-          <TouchableOpacity
-            style={styles.stepButton}
-            onPress={() => updateCalibrationValue(key, step, min, max)}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.stepButtonText}>+</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
-
   const renderSpecialistOverride = (analysis: AnalyzeResponse) => {
     const systemStage = analysis.result.stage;
     const selectedStage = manualStage ?? systemStage;
@@ -1278,6 +1287,153 @@ export default function App(): React.JSX.Element {
     );
   };
 
+  const renderQualityCard = (analysis: AnalyzeResponse) => {
+    const retakeRecommendations = analysis.quality.retake_recommendations ?? [];
+
+    return (
+      <View
+        style={[
+          styles.qualityPanel,
+          analysis.quality.is_acceptable ? styles.qualityGood : styles.qualityWarn,
+        ]}
+      >
+        <Text style={styles.qualityTitle}>Image Quality</Text>
+        <View style={styles.qualityScoreRow}>
+          <Text style={styles.qualityScoreValue}>
+            {analysis.quality.quality_score} / 100
+          </Text>
+          <Text style={styles.qualityScoreLabel}>
+            {analysis.quality.quality_label}
+          </Text>
+        </View>
+        {retakeRecommendations.length > 0 ? (
+          retakeRecommendations.map(message => (
+            <Text key={message} style={styles.warningText}>
+              {message}
+            </Text>
+          ))
+        ) : (
+          <Text style={styles.goodText}>
+            Image is suitable for automated screening support.
+          </Text>
+        )}
+      </View>
+    );
+  };
+
+  const renderFindingsCard = (analysis: AnalyzeResponse) => (
+    <View style={styles.summaryPanel}>
+      <Text style={styles.sectionTitle}>Detected Findings</Text>
+      {(analysis.detected_findings ?? []).map(finding => (
+        <View key={finding.label} style={styles.findingRow}>
+          <Text
+            style={[
+              styles.findingMark,
+              finding.detected ? styles.findingDetected : styles.findingAbsent,
+            ]}
+          >
+            {finding.detected ? '✓' : '✗'}
+          </Text>
+          <Text style={styles.findingText}>{finding.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderRecommendationCard = (analysis: AnalyzeResponse) => (
+    <View style={styles.summaryPanel}>
+      <Text style={styles.sectionTitle}>Screening Recommendation</Text>
+      <Text style={styles.recommendationText}>
+        {analysis.result.screening_recommendation ||
+          getScreeningStatus(analysis).recommendation}
+      </Text>
+      <Text style={styles.reviewDisclaimer}>{analysis.result.disclaimer}</Text>
+    </View>
+  );
+
+  const renderRuleBasedBanner = (analysis: AnalyzeResponse) => {
+    if (!isRuleBasedResult(analysis.result)) {
+      return null;
+    }
+
+    return (
+      <View style={styles.ruleBasedBanner}>
+        <Text style={styles.ruleBasedTitle}>Rule-based fallback active</Text>
+        <Text style={styles.ruleBasedText}>
+          Trained ML models were not used for this result. Ensure the backend is
+          running with the trained model artifacts loaded.
+        </Text>
+      </View>
+    );
+  };
+
+  const renderProbabilityRow = (label: string, percent: number) => (
+    <View key={label} style={styles.probabilityRow}>
+      <View style={styles.probabilityLabelRow}>
+        <Text style={styles.probabilityLabel}>{label}</Text>
+        <Text style={styles.probabilityValue}>{formatPercent(percent)}</Text>
+      </View>
+      <View style={styles.probabilityTrack}>
+        <View
+          style={[
+            styles.probabilityFill,
+            { width: `${Math.min(100, Math.max(0, percent))}%` },
+          ]}
+        />
+      </View>
+    </View>
+  );
+
+  const renderModelInsightsCard = (analysis: AnalyzeResponse) => {
+    const { result } = analysis;
+
+    if (isRuleBasedResult(result)) {
+      return null;
+    }
+
+    const stageEntries = STAGE_PROBABILITY_ORDER.filter(
+      key => result.probabilities?.[key] !== undefined,
+    ).map(key => ({
+      label: key,
+      value: (result.probabilities?.[key] ?? 0) * 100,
+    }));
+
+    const screeningEntries = ['Non-Referable', 'Referable']
+      .filter(key => result.probabilities?.[key] !== undefined)
+      .map(key => ({
+        label: key,
+        value: (result.probabilities?.[key] ?? 0) * 100,
+      }));
+
+    return (
+      <View style={styles.summaryPanel}>
+        <Text style={styles.sectionTitle}>ML Model Insights</Text>
+        <Text style={styles.modelTypeText}>
+          {getModelTypeLabel(result.model_type)}
+        </Text>
+        <Text style={styles.modelMetricText}>
+          Referable probability: {formatPercent(result.dr_probability)}
+        </Text>
+        {screeningEntries.length > 0 && (
+          <>
+            <Text style={styles.probabilityGroupTitle}>Screening tier</Text>
+            {screeningEntries.map(entry =>
+              renderProbabilityRow(entry.label, entry.value),
+            )}
+          </>
+        )}
+        {stageEntries.length > 0 && (
+          <>
+            <Text style={styles.probabilityGroupTitle}>DR stage estimate</Text>
+            {stageEntries.map(entry =>
+              renderProbabilityRow(entry.label, entry.value),
+            )}
+          </>
+        )}
+      </View>
+    );
+  };
+
   const renderResult = () => (
     <ScrollView style={styles.appSurface} contentContainerStyle={styles.page}>
       {renderTopBar('Case Review')}
@@ -1290,7 +1446,7 @@ export default function App(): React.JSX.Element {
                   ? selectedImage.analysis.processed_images.lesion_overlay ??
                     selectedImage.analysis.processed_images.original
                   : selectedImage.analysis?.processed_images.original ??
-                selectedImage.analysisUri,
+                    selectedImage.analysisUri,
             }}
             style={styles.preview}
           />
@@ -1321,38 +1477,35 @@ export default function App(): React.JSX.Element {
             ]}
           >
             <Text style={styles.resultLabel}>
-              {isAnalyzing ? 'Analysis running' : 'Tier 1 screening status'}
+              {isAnalyzing ? 'Analysis running' : 'Screening status'}
             </Text>
             <Text style={styles.resultTitle}>
               {isAnalyzing
-                ? 'Processing handcrafted retinal features'
+                ? 'Automated analysis in progress'
                 : selectedImage.analysis
                   ? getScreeningStatus(selectedImage.analysis).status
                   : 'Ready to analyze'}
             </Text>
             <Text style={styles.resultText}>
               {isAnalyzing
-                ? 'The backend is checking the centered capture region for blur, brightness, contrast, retinal field visibility, and classical DR features.'
+                ? 'The system is checking image quality, enhancing the retinal image, segmenting vessels, detecting lesions, extracting classical features, and preparing a screening-support result.'
                 : selectedImage.analysis
                   ? `${getScreeningStatus(selectedImage.analysis).recommendation} ${selectedImage.analysis.result.reason}`
-                  : 'Run the FastAPI pipeline on the centered capture region to check image quality and extract classical image-processing features.'}
+                  : 'Capture or upload an image to begin automated screening support.'}
             </Text>
             {selectedImage.analysis && (
               <View style={styles.resultSummaryRow}>
                 <View style={styles.stageBadge}>
-                  <Text style={styles.stageBadgeLabel}>Tier 2</Text>
+                  <Text style={styles.stageBadgeLabel}>Stage</Text>
                   <Text style={styles.stageBadgeValue}>
                     {selectedImage.analysis.result.stage ?? 'N/A'}
                   </Text>
                 </View>
                 <Text style={styles.resultProbability}>
-                  Referable support score:{' '}
-                  {formatNumber(
-                    selectedImage.analysis.result.dr_probability,
-                    0,
-                  )}
-                  %{'\n'}Stage estimate confidence:{' '}
-                  {formatPercent(selectedImage.analysis.result.confidence)}
+                  {getConfidenceLabel(selectedImage.analysis)}
+                  {'\n'}
+                  Referable risk {formatPercent(selectedImage.analysis.result.dr_probability)}
+                  {'\n'}Clinician review required
                 </Text>
               </View>
             )}
@@ -1373,55 +1526,13 @@ export default function App(): React.JSX.Element {
           )}
           {selectedImage.analysis && (
             <>
-              <View
-                style={[
-                  styles.qualityPanel,
-                  selectedImage.analysis.quality.is_acceptable
-                    ? styles.qualityGood
-                    : styles.qualityWarn,
-                ]}
-              >
-                <Text style={styles.qualityTitle}>
-                  Image quality:{' '}
-                  {selectedImage.analysis.quality.is_acceptable
-                    ? 'Acceptable'
-                    : 'Retake suggested'}
-                </Text>
-                <View style={styles.qualityGrid}>
-                  <View style={styles.qualityMetric}>
-                    <Text style={styles.metricLabel}>Blur</Text>
-                    <Text style={styles.metricValue}>
-                      {formatNumber(selectedImage.analysis.quality.blur_score)}
-                    </Text>
-                  </View>
-                  <View style={styles.qualityMetric}>
-                    <Text style={styles.metricLabel}>Brightness</Text>
-                    <Text style={styles.metricValue}>
-                      {formatNumber(
-                        selectedImage.analysis.quality.brightness_mean,
-                      )}
-                    </Text>
-                  </View>
-                  <View style={styles.qualityMetric}>
-                    <Text style={styles.metricLabel}>Contrast</Text>
-                    <Text style={styles.metricValue}>
-                      {formatNumber(selectedImage.analysis.quality.contrast_std)}
-                    </Text>
-                  </View>
-                </View>
-                {selectedImage.analysis.quality.warnings.length > 0 ? (
-                  selectedImage.analysis.quality.warnings.map(warning => (
-                    <Text key={warning} style={styles.warningText}>
-                      {warning}
-                    </Text>
-                  ))
-                ) : (
-                  <Text style={styles.goodText}>
-                    No blur, lighting, or contrast warning detected.
-                  </Text>
-                )}
-              </View>
+              {renderRuleBasedBanner(selectedImage.analysis)}
+              {renderQualityCard(selectedImage.analysis)}
+              {renderFindingsCard(selectedImage.analysis)}
+              {renderModelInsightsCard(selectedImage.analysis)}
+              {renderRecommendationCard(selectedImage.analysis)}
 
+              {selectedImage.analysis.quality.is_acceptable && (
               <View style={styles.processedPanel}>
                 <Text style={styles.sectionTitle}>Processed views</Text>
                 <View style={styles.processedGrid}>
@@ -1441,7 +1552,7 @@ export default function App(): React.JSX.Element {
                       }}
                       style={styles.processedImage}
                     />
-                    <Text style={styles.processedLabel}>CLAHE</Text>
+                    <Text style={styles.processedLabel}>Enhanced</Text>
                   </View>
                   <View style={styles.processedItem}>
                     <Image
@@ -1483,6 +1594,7 @@ export default function App(): React.JSX.Element {
                   </View>
                 </View>
               </View>
+              )}
             </>
           )}
           <View style={styles.metricGrid}>
@@ -1511,111 +1623,21 @@ export default function App(): React.JSX.Element {
               </Text>
             </View>
             <View style={styles.metricBox}>
-              <Text style={styles.metricLabel}>Confidence</Text>
+              <Text style={styles.metricLabel}>Referable risk</Text>
               <Text style={styles.metricValue}>
                 {selectedImage.analysis
-                  ? formatPercent(selectedImage.analysis.result.confidence)
+                  ? formatPercent(selectedImage.analysis.result.dr_probability)
                   : 'Waiting'}
               </Text>
             </View>
           </View>
-          {selectedImage.analysis?.quality.is_acceptable && (
-            <View style={styles.featurePanel}>
-              <Text style={styles.sectionTitle}>Extracted features</Text>
-              <Text style={styles.featureText}>
-                PAI:{' '}
-                {formatNumber(
-                  selectedImage.analysis.features.pathology_area_index,
-                  3,
-                )}
-                %
-              </Text>
-              <Text style={styles.featureText}>
-                Vessel density:{' '}
-                {formatNumber(
-                  selectedImage.analysis.features.vessel_density * 100,
-                  2,
-                )}
-                %  
-              </Text>
-              <Text style={styles.featureText}>
-                Microaneurysms:{' '}
-                {selectedImage.analysis.features.microaneurysm_count} (
-                {selectedImage.analysis.features.microaneurysm_area}px)
-              </Text>
-              <Text style={styles.featureText}>
-                Exudates: {selectedImage.analysis.features.exudate_count} (
-                {selectedImage.analysis.features.exudate_area}px)
-              </Text>
-              <Text style={styles.featureText}>
-                Exudate quadrants:{' '}
-                {selectedImage.analysis.features.exudate_quadrants.length > 0
-                  ? selectedImage.analysis.features.exudate_quadrants.join(', ')
-                  : 'None'}
-              </Text>
-              <Text style={styles.featureText}>
-                GLCM contrast:{' '}
-                {formatNumber(selectedImage.analysis.features.glcm_contrast, 2)}
-                {'   '}homogeneity:{' '}
-                {formatNumber(
-                  selectedImage.analysis.features.glcm_homogeneity,
-                  3,
-                )}
-                {'   '}energy:{' '}
-                {formatNumber(selectedImage.analysis.features.glcm_energy, 3)}
-              </Text>
-              <Text style={styles.featureText}>
-                Dataset stage scale: 0 no DR, 1 mild, 2 moderate, 3 severe, 4
-                proliferative.
-              </Text>
-            </View>
-          )}
           {selectedImage.analysis && renderSpecialistOverride(selectedImage.analysis)}
-          <View style={styles.calibrationPanel}>
-            <Text style={styles.sectionTitle}>Advanced calibration</Text>
-            {renderCalibrationControl('CLAHE clip', 'clahe_clip_limit', 0.8, 5, 0.2)}
-            {renderCalibrationControl(
-              'Exudate percentile',
-              'exudate_percentile',
-              90,
-              99.5,
-              0.5,
-            )}
-            {renderCalibrationControl(
-              'Local bright percentile',
-              'exudate_local_percentile',
-              90,
-              99.8,
-              0.5,
-            )}
-            {selectedImage && (
-              <TouchableOpacity
-                style={[styles.secondaryButton, styles.reprocessButton]}
-                onPress={() => analyzeImage(selectedImage)}
-                disabled={isAnalyzing}
-                activeOpacity={0.75}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  {isAnalyzing ? 'Processing' : 'Re-process'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.primaryButton, styles.buttonFlex]}
               onPress={openCapture}
             >
               <Text style={styles.primaryButtonText}>Retake</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.secondaryButton, styles.buttonFlex]}
-              onPress={() => analyzeImage(selectedImage)}
-              disabled={isAnalyzing}
-            >
-              <Text style={styles.secondaryButtonText}>
-                {isAnalyzing ? 'Analyzing' : 'Analyze'}
-              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -1700,12 +1722,18 @@ export default function App(): React.JSX.Element {
           damage to small blood vessels. Referable cases require professional
           review because they may indicate moderate or advanced retinal changes.
         </Text>
-        <Text style={styles.readingTitle}>Classical Processing Focus</Text>
+        <Text style={styles.readingTitle}>Dual-Tier ML Screening</Text>
         <Text style={styles.readingText}>
-          This project uses enhancement, thresholding, vessel filtering,
-          morphology, and handcrafted feature measurements with a supervised
-          tabular classifier rather than CNNs or deep learning. Its output is a
-          decision-support estimate, not a diagnosis.
+          After classical image processing extracts 203 retinal measurements, a
+          trained XGBoost model estimates DR stage (0–4) and a Stacking Ensemble
+          screens referable cases. Both models were trained on 3,564 labeled
+          images. Output is decision support only, not a diagnosis.
+        </Text>
+        <Text style={styles.readingTitle}>Classical Processing Layer</Text>
+        <Text style={styles.readingText}>
+          Enhancement, vessel segmentation, lesion detection, and handcrafted
+          feature extraction feed the supervised models. When models are
+          unavailable, the app falls back to rule-based staging.
         </Text>
       </View>
     </ScrollView>
@@ -2378,18 +2406,25 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 12,
   },
-  qualityGrid: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 10,
-  },
-  qualityMetric: {
-    flex: 1,
-    minHeight: 66,
+  qualityScoreRow: {
+    minHeight: 72,
     borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.72)',
-    padding: 10,
-    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  qualityScoreValue: {
+    color: '#12323A',
+    fontSize: 26,
+    fontWeight: '900',
+  },
+  qualityScoreLabel: {
+    color: '#0E5E63',
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: 2,
   },
   warningText: {
     color: '#8A6A12',
@@ -2469,7 +2504,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  featurePanel: {
+  summaryPanel: {
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
     borderColor: '#D8E8E4',
@@ -2477,10 +2512,111 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 14,
   },
-  featureText: {
-    color: '#4E666B',
+  findingRow: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  findingMark: {
+    width: 24,
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  findingDetected: {
+    color: '#147A5C',
+  },
+  findingAbsent: {
+    color: '#9A5660',
+  },
+  findingText: {
+    flex: 1,
+    color: '#12323A',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  recommendationText: {
+    color: '#12323A',
+    fontSize: 15,
+    fontWeight: '800',
     lineHeight: 22,
+  },
+  reviewDisclaimer: {
+    color: '#4E666B',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  ruleBasedBanner: {
+    borderRadius: 8,
+    backgroundColor: '#FFF8E8',
+    borderColor: '#E8C878',
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 14,
+  },
+  ruleBasedTitle: {
+    color: '#8A5A00',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  ruleBasedText: {
+    color: '#6B5420',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  modelTypeText: {
+    color: '#0E7C7B',
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  modelMetricText: {
+    color: '#12323A',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  probabilityGroupTitle: {
+    color: '#4E666B',
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 14,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  probabilityRow: {
+    marginBottom: 10,
+  },
+  probabilityLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  probabilityLabel: {
+    color: '#12323A',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+  },
+  probabilityValue: {
+    color: '#0E7C7B',
+    fontSize: 13,
+    fontWeight: '800',
+    marginLeft: 8,
+  },
+  probabilityTrack: {
+    backgroundColor: '#E6F0ED',
+    borderRadius: 4,
+    height: 8,
+    overflow: 'hidden',
+  },
+  probabilityFill: {
+    backgroundColor: '#0E7C7B',
+    borderRadius: 4,
+    height: 8,
   },
   overridePanel: {
     borderRadius: 8,
@@ -2544,68 +2680,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     marginTop: 10,
-  },
-  calibrationPanel: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 14,
-  },
-  calibrationRow: {
-    marginBottom: 14,
-  },
-  calibrationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  calibrationLabel: {
-    color: '#4E666B',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  calibrationValue: {
-    color: '#12323A',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  calibrationControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  calibrationTrack: {
-    flex: 1,
-    height: 10,
-    borderRadius: 8,
-    backgroundColor: '#E6F0ED',
-    overflow: 'hidden',
-  },
-  calibrationFill: {
-    height: '100%',
-    borderRadius: 8,
-    backgroundColor: '#0E7C7B',
-  },
-  stepButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#EAF4F1',
-    borderColor: '#CFE3DE',
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepButtonText: {
-    color: '#0E5E63',
-    fontSize: 19,
-    fontWeight: '900',
-  },
-  reprocessButton: {
-    marginTop: 2,
   },
   emptyPanel: {
     minHeight: 220,

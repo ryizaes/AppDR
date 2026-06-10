@@ -1,43 +1,5013 @@
 {
-  "model_name": "HistGradientBoostingClassifier",
-  "accuracy": 0.747612551159618,
-  "precision_macro": 0.5146980152001673,
-  "recall_macro": 0.49766566306995436,
-  "f1_macro": 0.5021189195938359,
-  "balanced_accuracy": 0.49766566306995436,
-  "cohen_kappa": 0.6119950900304155,
-  "medical_metrics": {
-    "0": {
-      "stage_name": "No DR",
-      "sensitivity_tpr": 0.9695290858725761,
-      "specificity_tnr": 0.9489247311827957
+  "problem_type": "multiclass",
+  "binary_referable": false,
+  "label_remapping": null,
+  "best_model_name": "XGBoost",
+  "best_candidate_type": "optimized_model",
+  "best_params": {
+    "colsample_bytree": 0.8896140219352956,
+    "learning_rate": 0.0234659871844148,
+    "max_depth": 5,
+    "min_child_weight": 7.262585331096916,
+    "n_estimators": 280,
+    "reg_alpha": 0.0016537913127711,
+    "reg_lambda": 0.0001005228726686,
+    "subsample": 0.7371306743213336
+  },
+  "random_state": 42,
+  "test_size": 0.2,
+  "cv_folds": 5,
+  "optuna_trials_per_model": 50,
+  "scaler": "robust",
+  "engineered_features_enabled": false,
+  "selected_feature_count": 75,
+  "selected_features": [
+    "all_lesion_circularity_mean",
+    "all_lesion_solidity_mean",
+    "all_lesion_eccentricity_mean",
+    "exudate_density",
+    "all_lesion_compactness_mean",
+    "hard_exudate_area",
+    "hard_exudate_count",
+    "hard_exudate_coverage_pct",
+    "exudate_area",
+    "wavelet_vertical_energy",
+    "lab_b_exudate_std",
+    "area_adjusted_exudate_count",
+    "lbp_std",
+    "fft_mid_frequency_ratio",
+    "texture_skewness",
+    "fft_high_frequency_ratio",
+    "texture_mean",
+    "exudate_count",
+    "fft_low_frequency_ratio",
+    "glcm_energy_45",
+    "lesion_density_score",
+    "hsv_v_min",
+    "superior_lesion_count",
+    "rgb_g_max",
+    "lab_color_a_min",
+    "lbp_entropy",
+    "nasal_texture_mean",
+    "vessel_abnormality_score",
+    "texture_std",
+    "wavelet_diagonal_energy",
+    "temporal_lesion_density",
+    "lab_color_l_min",
+    "hard_exudate_brightness_mean",
+    "temporal_lesion_count",
+    "glcm_energy_135",
+    "vessel_length",
+    "exudate_burden_score",
+    "hard_exudate_brightness_std",
+    "total_lesion_count",
+    "superior_texture_mean",
+    "glcm_energy",
+    "inferior_texture_mean",
+    "rgb_b_std",
+    "lbp_uniform_ratio",
+    "texture_kurtosis",
+    "all_lesion_aspect_ratio_mean",
+    "combined_lesion_burden",
+    "hsv_s_std",
+    "temporal_texture_mean",
+    "vessel_endpoint_count",
+    "vessel_skeleton_length",
+    "glcm_energy_0",
+    "stage_progression_score",
+    "glcm_correlation",
+    "vessel_fragmentation_index",
+    "fft_dominant_radius_std",
+    "all_lesion_area",
+    "rgb_b_max",
+    "lbp_mean",
+    "lab_color_b_min",
+    "lab_color_l_max",
+    "nasal_texture_std",
+    "glcm_entropy",
+    "glcm_homogeneity",
+    "temporal_texture_std",
+    "glcm_energy_90",
+    "texture_variance",
+    "wavelet_approx_energy",
+    "wavelet_detail_energy",
+    "nasal_vessel_density",
+    "vessel_area_ratio",
+    "rgb_r_min",
+    "lab_color_a_max",
+    "quality_blur_score",
+    "lab_color_b_entropy"
+  ],
+  "class_labels": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "class_distribution": {
+    "problem_type": "multiclass",
+    "total_samples": 3564,
+    "class_counts": {
+      "0": 1800,
+      "1": 348,
+      "2": 944,
+      "3": 189,
+      "4": 283
     },
-    "1": {
-      "stage_name": "Mild NPDR",
-      "sensitivity_tpr": 0.43243243243243246,
-      "specificity_tnr": 0.9453717754172989
+    "class_percentages": {
+      "0": 0.5050505050505051,
+      "1": 0.09764309764309764,
+      "2": 0.2648709315375982,
+      "3": 0.05303030303030303,
+      "4": 0.07940516273849607
     },
-    "2": {
-      "stage_name": "Moderate NPDR",
-      "sensitivity_tpr": 0.73,
-      "specificity_tnr": 0.8405253283302064
+    "max_to_min_ratio": 9.523809523809524,
+    "is_imbalanced": true,
+    "imbalance_strategy": [
+      "class_weight='balanced' where supported",
+      "sample_weight from compute_sample_weight during model fitting",
+      "scale_pos_weight for binary XGBoost",
+      "BalancedRandomForestClassifier for the balanced forest candidate"
+    ]
+  },
+  "data_quality": {
+    "row_count": 3662,
+    "feature_count": 203,
+    "nan_cell_count": 0,
+    "inf_cell_count": 0,
+    "nan_features": {},
+    "inf_features": {},
+    "duplicate_feature_row_count": 251,
+    "exact_duplicate_row_count": 193,
+    "duplicate_feature_row_indices_preview": [
+      8,
+      17,
+      19,
+      35,
+      43,
+      60,
+      72,
+      89,
+      145,
+      164,
+      167,
+      190,
+      218,
+      234,
+      236,
+      253,
+      255,
+      263,
+      268,
+      272,
+      274,
+      298,
+      299,
+      349,
+      352,
+      356,
+      366,
+      370,
+      384,
+      388,
+      389,
+      390,
+      398,
+      422,
+      424,
+      430,
+      433,
+      435,
+      439,
+      487,
+      503,
+      548,
+      557,
+      583,
+      602,
+      613,
+      626,
+      635,
+      651,
+      664
+    ],
+    "constant_feature_count": 0,
+    "constant_features": [],
+    "near_zero_variance_feature_count": 3,
+    "near_zero_variance_features": [
+      "ma_density_per_retinal_area",
+      "soft_exudate_count",
+      "hsv_h_min"
+    ],
+    "variance_summary": {
+      "min": 6.287111019982916e-11,
+      "median": 22.15298125820828,
+      "max": 5.806369171138641e+23
     },
-    "3": {
-      "stage_name": "Severe NPDR",
-      "sensitivity_tpr": 0.05128205128205128,
-      "specificity_tnr": 0.968299711815562
+    "exact_duplicate_rows_removed": 98
+  },
+  "preprocessing_report": {
+    "selection_basis": "5-fold CV LogisticRegression, ranked by F1 then recall",
+    "candidates": [
+      {
+        "scaler": "robust",
+        "engineered_features_enabled": false,
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7109662948966109,
+            "std": 0.019168746213982634
+          },
+          "balanced_accuracy": {
+            "mean": 0.5951435774272613,
+            "std": 0.03592829011862061
+          },
+          "brier_score": {
+            "mean": 0.40383071310194135,
+            "std": 0.02568321431420975
+          },
+          "cohen_kappa": {
+            "mean": 0.5756525005883886,
+            "std": 0.028894223495417426
+          },
+          "f1": {
+            "mean": 0.5524323105003353,
+            "std": 0.03051160886127725
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.4567001566964698,
+            "std": 0.02746181401585884
+          },
+          "precision": {
+            "mean": 0.5458211266131018,
+            "std": 0.027425499719379846
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7564846938863934,
+            "std": 0.01999146879976018
+          },
+          "recall": {
+            "mean": 0.5951435774272613,
+            "std": 0.03592829011862061
+          },
+          "roc_auc": {
+            "mean": 0.8837998387339653,
+            "std": 0.01703618616483748
+          }
+        },
+        "rank_key": [
+          0.5524323105003353,
+          0.5951435774272613,
+          0.7564846938863934
+        ]
+      },
+      {
+        "scaler": "robust",
+        "engineered_features_enabled": true,
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7106166466955479,
+            "std": 0.01828809111717796
+          },
+          "balanced_accuracy": {
+            "mean": 0.5911597164614683,
+            "std": 0.03428299472913536
+          },
+          "brier_score": {
+            "mean": 0.4034564341869601,
+            "std": 0.022678586504270265
+          },
+          "cohen_kappa": {
+            "mean": 0.5741736602856727,
+            "std": 0.027580152060174876
+          },
+          "f1": {
+            "mean": 0.5497713592931385,
+            "std": 0.02871608843365619
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.4493403385872738,
+            "std": 0.036199154063502686
+          },
+          "precision": {
+            "mean": 0.5434104323970539,
+            "std": 0.025162329970307977
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7625062585910314,
+            "std": 0.028467377963253614
+          },
+          "recall": {
+            "mean": 0.5911597164614683,
+            "std": 0.03428299472913536
+          },
+          "roc_auc": {
+            "mean": 0.8833919812868771,
+            "std": 0.015654479218854454
+          }
+        },
+        "rank_key": [
+          0.5497713592931385,
+          0.5911597164614683,
+          0.7625062585910314
+        ]
+      },
+      {
+        "scaler": "standard",
+        "engineered_features_enabled": false,
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7127305127968783,
+            "std": 0.016908541955075695
+          },
+          "balanced_accuracy": {
+            "mean": 0.5828186401453447,
+            "std": 0.03119318243069395
+          },
+          "brier_score": {
+            "mean": 0.3985163895192242,
+            "std": 0.022005320418751067
+          },
+          "cohen_kappa": {
+            "mean": 0.5762664702772385,
+            "std": 0.023728715769324723
+          },
+          "f1": {
+            "mean": 0.548088379538784,
+            "std": 0.026359386860307383
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.43002488708636744,
+            "std": 0.03579221619017385
+          },
+          "precision": {
+            "mean": 0.5404149679221197,
+            "std": 0.024576434075618204
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7805180769966039,
+            "std": 0.02399247226962271
+          },
+          "recall": {
+            "mean": 0.5828186401453447,
+            "std": 0.03119318243069395
+          },
+          "roc_auc": {
+            "mean": 0.8918873071272513,
+            "std": 0.010186247078009344
+          }
+        },
+        "rank_key": [
+          0.548088379538784,
+          0.5828186401453447,
+          0.7805180769966039
+        ]
+      },
+      {
+        "scaler": "standard",
+        "engineered_features_enabled": true,
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7109748978400467,
+            "std": 0.014970827362989575
+          },
+          "balanced_accuracy": {
+            "mean": 0.5741683551028683,
+            "std": 0.031133359035788743
+          },
+          "brier_score": {
+            "mean": 0.39711949470716956,
+            "std": 0.021858063767698638
+          },
+          "cohen_kappa": {
+            "mean": 0.573523616718493,
+            "std": 0.02206957316479661
+          },
+          "f1": {
+            "mean": 0.5420603610356098,
+            "std": 0.02506133591753162
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.4352874304851445,
+            "std": 0.0275929176321613
+          },
+          "precision": {
+            "mean": 0.5352114287502778,
+            "std": 0.023932294956680894
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.775346220840972,
+            "std": 0.018179495494565212
+          },
+          "recall": {
+            "mean": 0.5741683551028683,
+            "std": 0.031133359035788743
+          },
+          "roc_auc": {
+            "mean": 0.892729797297854,
+            "std": 0.010391199327765508
+          }
+        },
+        "rank_key": [
+          0.5420603610356098,
+          0.5741683551028683,
+          0.775346220840972
+        ]
+      }
+    ],
+    "selected_scaler": "robust",
+    "engineered_features_enabled": false
+  },
+  "feature_selection_report": {
+    "best_method": "shap",
+    "best_requested_count": 75,
+    "best_selected_feature_count": 75,
+    "experiments": [
+      {
+        "method": "shap",
+        "requested_count": 75,
+        "selected_feature_count": 75,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_solidity_mean",
+          "all_lesion_eccentricity_mean",
+          "exudate_density",
+          "all_lesion_compactness_mean",
+          "hard_exudate_area",
+          "hard_exudate_count",
+          "hard_exudate_coverage_pct",
+          "exudate_area",
+          "wavelet_vertical_energy",
+          "lab_b_exudate_std",
+          "area_adjusted_exudate_count",
+          "lbp_std",
+          "fft_mid_frequency_ratio",
+          "texture_skewness",
+          "fft_high_frequency_ratio",
+          "texture_mean",
+          "exudate_count",
+          "fft_low_frequency_ratio",
+          "glcm_energy_45",
+          "lesion_density_score",
+          "hsv_v_min",
+          "superior_lesion_count",
+          "rgb_g_max",
+          "lab_color_a_min",
+          "lbp_entropy",
+          "nasal_texture_mean",
+          "vessel_abnormality_score",
+          "texture_std",
+          "wavelet_diagonal_energy",
+          "temporal_lesion_density",
+          "lab_color_l_min",
+          "hard_exudate_brightness_mean",
+          "temporal_lesion_count",
+          "glcm_energy_135",
+          "vessel_length",
+          "exudate_burden_score",
+          "hard_exudate_brightness_std",
+          "total_lesion_count",
+          "superior_texture_mean",
+          "glcm_energy",
+          "inferior_texture_mean",
+          "rgb_b_std",
+          "lbp_uniform_ratio",
+          "texture_kurtosis",
+          "all_lesion_aspect_ratio_mean",
+          "combined_lesion_burden",
+          "hsv_s_std",
+          "temporal_texture_mean",
+          "vessel_endpoint_count",
+          "vessel_skeleton_length",
+          "glcm_energy_0",
+          "stage_progression_score",
+          "glcm_correlation",
+          "vessel_fragmentation_index",
+          "fft_dominant_radius_std",
+          "all_lesion_area",
+          "rgb_b_max",
+          "lbp_mean",
+          "lab_color_b_min",
+          "lab_color_l_max",
+          "nasal_texture_std",
+          "glcm_entropy",
+          "glcm_homogeneity",
+          "temporal_texture_std",
+          "glcm_energy_90",
+          "texture_variance",
+          "wavelet_approx_energy",
+          "wavelet_detail_energy",
+          "nasal_vessel_density",
+          "vessel_area_ratio",
+          "rgb_r_min",
+          "lab_color_a_max",
+          "quality_blur_score",
+          "lab_color_b_entropy"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7442959412541863,
+            "std": 0.012751817848716384
+          },
+          "balanced_accuracy": {
+            "mean": 0.5341526625978805,
+            "std": 0.03383485424499659
+          },
+          "brier_score": {
+            "mean": 0.41303334503362416,
+            "std": 0.007085777767074182
+          },
+          "cohen_kappa": {
+            "mean": 0.6019538715944805,
+            "std": 0.022957074686636273
+          },
+          "f1": {
+            "mean": 0.5435440473341396,
+            "std": 0.03124591950025629
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.38198666543767473,
+            "std": 0.029121289020092662
+          },
+          "precision": {
+            "mean": 0.5673513296510003,
+            "std": 0.02701035558461199
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7823317322254763,
+            "std": 0.02606572411414639
+          },
+          "recall": {
+            "mean": 0.5341526625978805,
+            "std": 0.03383485424499659
+          },
+          "roc_auc": {
+            "mean": 0.8746551567897276,
+            "std": 0.008088658029645649
+          }
+        },
+        "rank_key": [
+          0.5435440473341396,
+          0.5341526625978805,
+          0.7823317322254763
+        ]
+      },
+      {
+        "method": "random_forest",
+        "requested_count": 50,
+        "selected_feature_count": 50,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_eccentricity_mean",
+          "all_lesion_compactness_mean",
+          "all_lesion_solidity_mean",
+          "lesion_density_score",
+          "all_lesion_area",
+          "combined_lesion_burden",
+          "exudate_density",
+          "hard_exudate_coverage_pct",
+          "lesion_vessel_interaction",
+          "hard_exudate_brightness_mean",
+          "nasal_texture_mean",
+          "lbp_std",
+          "hsv_h_mean",
+          "area_adjusted_exudate_count",
+          "glcm_energy_45",
+          "temporal_lesion_density",
+          "texture_kurtosis",
+          "glcm_correlation",
+          "texture_skewness",
+          "all_lesion_perimeter_mean",
+          "quality_blur_score",
+          "lab_b_exudate_std",
+          "nasal_vessel_density",
+          "texture_mean",
+          "superior_texture_mean",
+          "hsv_h_std",
+          "total_lesion_count",
+          "quality_adjusted_lesion_density",
+          "exudate_area",
+          "lbp_entropy",
+          "vessel_curvature_mean",
+          "rgb_b_std",
+          "all_lesion_aspect_ratio_mean",
+          "exudate_burden_score",
+          "hard_exudate_area",
+          "vessel_area_ratio",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "advanced_dr_indicator_score",
+          "vessel_density",
+          "wavelet_diagonal_energy",
+          "lbp_mean",
+          "quality_snr",
+          "ma_distance_to_optic_disc_min",
+          "fft_high_frequency_ratio",
+          "wavelet_vertical_energy",
+          "fft_low_frequency_ratio",
+          "hard_exudate_distance_to_macula_mean",
+          "stage_progression_score",
+          "vessel_skeleton_length"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7243045441976218,
+            "std": 0.019268050161135076
+          },
+          "balanced_accuracy": {
+            "mean": 0.5370185956334889,
+            "std": 0.03648427355758269
+          },
+          "brier_score": {
+            "mean": 0.4310463039322621,
+            "std": 0.005120608559666416
+          },
+          "cohen_kappa": {
+            "mean": 0.5761630382362009,
+            "std": 0.031508106185694766
+          },
+          "f1": {
+            "mean": 0.5410331097638148,
+            "std": 0.03556916057737515
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.4216173533659016,
+            "std": 0.04156756756093697
+          },
+          "precision": {
+            "mean": 0.547934021606108,
+            "std": 0.035441439348492136
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7618463457057902,
+            "std": 0.031383919108330376
+          },
+          "recall": {
+            "mean": 0.5370185956334889,
+            "std": 0.03648427355758269
+          },
+          "roc_auc": {
+            "mean": 0.8712465689483396,
+            "std": 0.009209279401056912
+          }
+        },
+        "rank_key": [
+          0.5410331097638148,
+          0.5370185956334889,
+          0.7618463457057902
+        ]
+      },
+      {
+        "method": "shap",
+        "requested_count": 100,
+        "selected_feature_count": 100,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_solidity_mean",
+          "all_lesion_eccentricity_mean",
+          "exudate_density",
+          "all_lesion_compactness_mean",
+          "hard_exudate_area",
+          "hard_exudate_count",
+          "hard_exudate_coverage_pct",
+          "exudate_area",
+          "wavelet_vertical_energy",
+          "lab_b_exudate_std",
+          "area_adjusted_exudate_count",
+          "lbp_std",
+          "fft_mid_frequency_ratio",
+          "texture_skewness",
+          "fft_high_frequency_ratio",
+          "texture_mean",
+          "exudate_count",
+          "fft_low_frequency_ratio",
+          "glcm_energy_45",
+          "lesion_density_score",
+          "hsv_v_min",
+          "superior_lesion_count",
+          "rgb_g_max",
+          "lab_color_a_min",
+          "lbp_entropy",
+          "nasal_texture_mean",
+          "vessel_abnormality_score",
+          "texture_std",
+          "wavelet_diagonal_energy",
+          "temporal_lesion_density",
+          "lab_color_l_min",
+          "hard_exudate_brightness_mean",
+          "temporal_lesion_count",
+          "glcm_energy_135",
+          "vessel_length",
+          "exudate_burden_score",
+          "hard_exudate_brightness_std",
+          "total_lesion_count",
+          "superior_texture_mean",
+          "glcm_energy",
+          "inferior_texture_mean",
+          "rgb_b_std",
+          "lbp_uniform_ratio",
+          "texture_kurtosis",
+          "all_lesion_aspect_ratio_mean",
+          "combined_lesion_burden",
+          "hsv_s_std",
+          "temporal_texture_mean",
+          "vessel_endpoint_count",
+          "vessel_skeleton_length",
+          "glcm_energy_0",
+          "stage_progression_score",
+          "glcm_correlation",
+          "vessel_fragmentation_index",
+          "fft_dominant_radius_std",
+          "all_lesion_area",
+          "rgb_b_max",
+          "lbp_mean",
+          "lab_color_b_min",
+          "lab_color_l_max",
+          "nasal_texture_std",
+          "glcm_entropy",
+          "glcm_homogeneity",
+          "temporal_texture_std",
+          "glcm_energy_90",
+          "texture_variance",
+          "wavelet_approx_energy",
+          "wavelet_detail_energy",
+          "nasal_vessel_density",
+          "vessel_area_ratio",
+          "rgb_r_min",
+          "lab_color_a_max",
+          "quality_blur_score",
+          "lab_color_b_entropy",
+          "ma_to_exudate_ratio",
+          "quality_snr",
+          "quality_sharpness",
+          "hard_exudate_max_area",
+          "all_lesion_perimeter_mean",
+          "glcm_dissimilarity",
+          "inferior_texture_std",
+          "hard_exudate_distance_to_macula_mean",
+          "vessel_density",
+          "lab_color_a_entropy",
+          "hsv_s_min",
+          "rgb_g_mean",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "advanced_dr_indicator_score",
+          "hemorrhage_to_exudate_ratio",
+          "rgb_r_mean",
+          "hsv_h_std",
+          "glcm_contrast_90",
+          "texture_lesion_interaction",
+          "lesion_vessel_interaction",
+          "ma_temporal_count",
+          "inferior_lesion_count",
+          "lab_color_l_mean",
+          "hsv_s_entropy",
+          "wavelet_horizontal_energy"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7460472547393001,
+            "std": 0.020697487815077773
+          },
+          "balanced_accuracy": {
+            "mean": 0.5258485392644483,
+            "std": 0.038747185059421395
+          },
+          "brier_score": {
+            "mean": 0.40801769178944136,
+            "std": 0.007749546774586396
+          },
+          "cohen_kappa": {
+            "mean": 0.6027222008414883,
+            "std": 0.03431233829879475
+          },
+          "f1": {
+            "mean": 0.5376977865008392,
+            "std": 0.03895024915750202
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.38198789442959413,
+            "std": 0.03876215451593285
+          },
+          "precision": {
+            "mean": 0.5655504562433091,
+            "std": 0.0404940419383953
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7801402639558062,
+            "std": 0.028226631416924178
+          },
+          "recall": {
+            "mean": 0.5258485392644483,
+            "std": 0.038747185059421395
+          },
+          "roc_auc": {
+            "mean": 0.8763605284835728,
+            "std": 0.00893606935196402
+          }
+        },
+        "rank_key": [
+          0.5376977865008392,
+          0.5258485392644483,
+          0.7801402639558062
+        ]
+      },
+      {
+        "method": "random_forest",
+        "requested_count": 75,
+        "selected_feature_count": 75,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_eccentricity_mean",
+          "all_lesion_compactness_mean",
+          "all_lesion_solidity_mean",
+          "lesion_density_score",
+          "all_lesion_area",
+          "combined_lesion_burden",
+          "exudate_density",
+          "hard_exudate_coverage_pct",
+          "lesion_vessel_interaction",
+          "hard_exudate_brightness_mean",
+          "nasal_texture_mean",
+          "lbp_std",
+          "hsv_h_mean",
+          "area_adjusted_exudate_count",
+          "glcm_energy_45",
+          "temporal_lesion_density",
+          "texture_kurtosis",
+          "glcm_correlation",
+          "texture_skewness",
+          "all_lesion_perimeter_mean",
+          "quality_blur_score",
+          "lab_b_exudate_std",
+          "nasal_vessel_density",
+          "texture_mean",
+          "superior_texture_mean",
+          "hsv_h_std",
+          "total_lesion_count",
+          "quality_adjusted_lesion_density",
+          "exudate_area",
+          "lbp_entropy",
+          "vessel_curvature_mean",
+          "rgb_b_std",
+          "all_lesion_aspect_ratio_mean",
+          "exudate_burden_score",
+          "hard_exudate_area",
+          "vessel_area_ratio",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "advanced_dr_indicator_score",
+          "vessel_density",
+          "wavelet_diagonal_energy",
+          "lbp_mean",
+          "quality_snr",
+          "ma_distance_to_optic_disc_min",
+          "fft_high_frequency_ratio",
+          "wavelet_vertical_energy",
+          "fft_low_frequency_ratio",
+          "hard_exudate_distance_to_macula_mean",
+          "stage_progression_score",
+          "vessel_skeleton_length",
+          "glcm_energy",
+          "hard_exudate_max_area",
+          "fft_dominant_radius_std",
+          "temporal_texture_mean",
+          "hard_exudate_brightness_std",
+          "glcm_energy_0",
+          "hard_exudate_count",
+          "vessel_curvature_std",
+          "lbp_uniform_ratio",
+          "exudate_mean_area",
+          "vessel_length",
+          "glcm_energy_90",
+          "local_texture_variance_std",
+          "superior_vessel_density",
+          "vessel_tortuosity_mean",
+          "hard_exudate_mean_area",
+          "vessel_tortuosity_max",
+          "glcm_energy_135",
+          "temporal_texture_std",
+          "all_lesion_convex_hull_area_mean",
+          "inferior_texture_mean",
+          "temporal_lesion_count",
+          "inferior_texture_std",
+          "fft_mid_frequency_ratio",
+          "lab_color_a_entropy"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7281592773527514,
+            "std": 0.02315696964806605
+          },
+          "balanced_accuracy": {
+            "mean": 0.52530817109368,
+            "std": 0.037365584430256935
+          },
+          "brier_score": {
+            "mean": 0.4337613064123412,
+            "std": 0.007600360200505701
+          },
+          "cohen_kappa": {
+            "mean": 0.5786124772641015,
+            "std": 0.03708348727772494
+          },
+          "f1": {
+            "mean": 0.5357790211560903,
+            "std": 0.03771195585657158
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.4160106922296986,
+            "std": 0.046458263471557966
+          },
+          "precision": {
+            "mean": 0.5545598466166785,
+            "std": 0.039567551472030324
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7630091583535339,
+            "std": 0.03175378634628518
+          },
+          "recall": {
+            "mean": 0.52530817109368,
+            "std": 0.037365584430256935
+          },
+          "roc_auc": {
+            "mean": 0.86911240374817,
+            "std": 0.009442288390975351
+          }
+        },
+        "rank_key": [
+          0.5357790211560903,
+          0.52530817109368,
+          0.7630091583535339
+        ]
+      },
+      {
+        "method": "random_forest",
+        "requested_count": 100,
+        "selected_feature_count": 100,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_eccentricity_mean",
+          "all_lesion_compactness_mean",
+          "all_lesion_solidity_mean",
+          "lesion_density_score",
+          "all_lesion_area",
+          "combined_lesion_burden",
+          "exudate_density",
+          "hard_exudate_coverage_pct",
+          "lesion_vessel_interaction",
+          "hard_exudate_brightness_mean",
+          "nasal_texture_mean",
+          "lbp_std",
+          "hsv_h_mean",
+          "area_adjusted_exudate_count",
+          "glcm_energy_45",
+          "temporal_lesion_density",
+          "texture_kurtosis",
+          "glcm_correlation",
+          "texture_skewness",
+          "all_lesion_perimeter_mean",
+          "quality_blur_score",
+          "lab_b_exudate_std",
+          "nasal_vessel_density",
+          "texture_mean",
+          "superior_texture_mean",
+          "hsv_h_std",
+          "total_lesion_count",
+          "quality_adjusted_lesion_density",
+          "exudate_area",
+          "lbp_entropy",
+          "vessel_curvature_mean",
+          "rgb_b_std",
+          "all_lesion_aspect_ratio_mean",
+          "exudate_burden_score",
+          "hard_exudate_area",
+          "vessel_area_ratio",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "advanced_dr_indicator_score",
+          "vessel_density",
+          "wavelet_diagonal_energy",
+          "lbp_mean",
+          "quality_snr",
+          "ma_distance_to_optic_disc_min",
+          "fft_high_frequency_ratio",
+          "wavelet_vertical_energy",
+          "fft_low_frequency_ratio",
+          "hard_exudate_distance_to_macula_mean",
+          "stage_progression_score",
+          "vessel_skeleton_length",
+          "glcm_energy",
+          "hard_exudate_max_area",
+          "fft_dominant_radius_std",
+          "temporal_texture_mean",
+          "hard_exudate_brightness_std",
+          "glcm_energy_0",
+          "hard_exudate_count",
+          "vessel_curvature_std",
+          "lbp_uniform_ratio",
+          "exudate_mean_area",
+          "vessel_length",
+          "glcm_energy_90",
+          "local_texture_variance_std",
+          "superior_vessel_density",
+          "vessel_tortuosity_mean",
+          "hard_exudate_mean_area",
+          "vessel_tortuosity_max",
+          "glcm_energy_135",
+          "temporal_texture_std",
+          "all_lesion_convex_hull_area_mean",
+          "inferior_texture_mean",
+          "temporal_lesion_count",
+          "inferior_texture_std",
+          "fft_mid_frequency_ratio",
+          "lab_color_a_entropy",
+          "hsv_s_std",
+          "rgb_b_entropy",
+          "exudate_count",
+          "lab_color_a_std",
+          "hemorrhage_to_exudate_ratio",
+          "vessel_tortuosity_std",
+          "nasal_lesion_density",
+          "temporal_vessel_density",
+          "rgb_b_mean",
+          "ma_distance_to_optic_disc_mean",
+          "glcm_contrast_90",
+          "hsv_h_entropy",
+          "rgb_b_max",
+          "glcm_homogeneity",
+          "vessel_abnormality_score",
+          "texture_lesion_interaction",
+          "hsv_s_entropy",
+          "hard_exudate_texture_mean",
+          "vessel_fragmentation_index",
+          "ma_to_exudate_ratio",
+          "nasal_lesion_count",
+          "lab_color_b_entropy",
+          "hsv_s_mean",
+          "quality_brightness",
+          "fft_dominant_radius_mean"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7393867330322303,
+            "std": 0.022814722309849152
+          },
+          "balanced_accuracy": {
+            "mean": 0.5183899581994262,
+            "std": 0.03765651089145318
+          },
+          "brier_score": {
+            "mean": 0.4236868518836173,
+            "std": 0.007335282851494203
+          },
+          "cohen_kappa": {
+            "mean": 0.5912733407841608,
+            "std": 0.03580013710653441
+          },
+          "f1": {
+            "mean": 0.5344224167775979,
+            "std": 0.040731764451252504
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.39566288751651457,
+            "std": 0.04233450991874446
+          },
+          "precision": {
+            "mean": 0.5774200656961129,
+            "std": 0.055048850040802406
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.76849754367411,
+            "std": 0.029212478531191827
+          },
+          "recall": {
+            "mean": 0.5183899581994262,
+            "std": 0.03765651089145318
+          },
+          "roc_auc": {
+            "mean": 0.8708769089956089,
+            "std": 0.008546547592387906
+          }
+        },
+        "rank_key": [
+          0.5344224167775979,
+          0.5183899581994262,
+          0.76849754367411
+        ]
+      },
+      {
+        "method": "shap",
+        "requested_count": 50,
+        "selected_feature_count": 50,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_solidity_mean",
+          "all_lesion_eccentricity_mean",
+          "exudate_density",
+          "all_lesion_compactness_mean",
+          "hard_exudate_area",
+          "hard_exudate_count",
+          "hard_exudate_coverage_pct",
+          "exudate_area",
+          "wavelet_vertical_energy",
+          "lab_b_exudate_std",
+          "area_adjusted_exudate_count",
+          "lbp_std",
+          "fft_mid_frequency_ratio",
+          "texture_skewness",
+          "fft_high_frequency_ratio",
+          "texture_mean",
+          "exudate_count",
+          "fft_low_frequency_ratio",
+          "glcm_energy_45",
+          "lesion_density_score",
+          "hsv_v_min",
+          "superior_lesion_count",
+          "rgb_g_max",
+          "lab_color_a_min",
+          "lbp_entropy",
+          "nasal_texture_mean",
+          "vessel_abnormality_score",
+          "texture_std",
+          "wavelet_diagonal_energy",
+          "temporal_lesion_density",
+          "lab_color_l_min",
+          "hard_exudate_brightness_mean",
+          "temporal_lesion_count",
+          "glcm_energy_135",
+          "vessel_length",
+          "exudate_burden_score",
+          "hard_exudate_brightness_std",
+          "total_lesion_count",
+          "superior_texture_mean",
+          "glcm_energy",
+          "inferior_texture_mean",
+          "rgb_b_std",
+          "lbp_uniform_ratio",
+          "texture_kurtosis",
+          "all_lesion_aspect_ratio_mean",
+          "combined_lesion_burden",
+          "hsv_s_std",
+          "temporal_texture_mean",
+          "vessel_endpoint_count"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7243057731895413,
+            "std": 0.010985688259280878
+          },
+          "balanced_accuracy": {
+            "mean": 0.5274705884599905,
+            "std": 0.023031777230637637
+          },
+          "brier_score": {
+            "mean": 0.4230216277544674,
+            "std": 0.005216047500485298
+          },
+          "cohen_kappa": {
+            "mean": 0.5746212096882461,
+            "std": 0.017824443902303814
+          },
+          "f1": {
+            "mean": 0.5315172913872572,
+            "std": 0.02045686561469616
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.42056472178695425,
+            "std": 0.03030616583657267
+          },
+          "precision": {
+            "mean": 0.5398979570192681,
+            "std": 0.0199746569259219
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.762419893680973,
+            "std": 0.027389263193453958
+          },
+          "recall": {
+            "mean": 0.5274705884599905,
+            "std": 0.023031777230637637
+          },
+          "roc_auc": {
+            "mean": 0.8672961334282843,
+            "std": 0.006353263131799759
+          }
+        },
+        "rank_key": [
+          0.5315172913872572,
+          0.5274705884599905,
+          0.762419893680973
+        ]
+      },
+      {
+        "method": "mutual_information",
+        "requested_count": 50,
+        "selected_feature_count": 50,
+        "selected_features": [
+          "area_adjusted_exudate_count",
+          "area_adjusted_ma_count",
+          "ma_density_per_retinal_area",
+          "area_adjusted_hemorrhage_count",
+          "hsv_v_min",
+          "lab_color_a_min",
+          "rgb_b_std",
+          "wavelet_vertical_energy",
+          "vessel_length",
+          "vessel_skeleton_length",
+          "lbp_uniform_ratio",
+          "lab_b_exudate_std",
+          "rgb_b_max",
+          "hsv_s_std",
+          "fft_low_frequency_ratio",
+          "wavelet_diagonal_energy",
+          "lab_color_b_min",
+          "lbp_entropy",
+          "glcm_contrast_90",
+          "quality_blur_score",
+          "all_lesion_circularity_mean",
+          "texture_skewness",
+          "hard_exudate_brightness_std",
+          "all_lesion_eccentricity_mean",
+          "fft_mid_frequency_ratio",
+          "temporal_lesion_density",
+          "lesion_density_score",
+          "fft_high_frequency_ratio",
+          "lab_color_l_std",
+          "hsv_s_entropy",
+          "vessel_endpoint_count",
+          "rgb_g_max",
+          "lab_color_b_max",
+          "hsv_v_std",
+          "exudate_area",
+          "lab_color_l_max",
+          "inferior_texture_mean",
+          "texture_mean",
+          "rgb_r_std",
+          "rgb_r_min",
+          "wavelet_detail_energy",
+          "hard_exudate_area",
+          "all_lesion_solidity_mean",
+          "temporal_texture_mean",
+          "exudate_count",
+          "temporal_lesion_count",
+          "quality_sharpness",
+          "advanced_dr_indicator_score",
+          "hard_exudate_brightness_mean",
+          "hemorrhage_to_exudate_ratio"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7414858512305281,
+            "std": 0.01703712700768873
+          },
+          "balanced_accuracy": {
+            "mean": 0.5234892449797153,
+            "std": 0.025481386722552027
+          },
+          "brier_score": {
+            "mean": 0.4078029744413307,
+            "std": 0.00629035417014401
+          },
+          "cohen_kappa": {
+            "mean": 0.5983024155405063,
+            "std": 0.02671868208150932
+          },
+          "f1": {
+            "mean": 0.5306911459433443,
+            "std": 0.025067697990257622
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.3932159646050327,
+            "std": 0.039237895160521105
+          },
+          "precision": {
+            "mean": 0.5492119731691922,
+            "std": 0.027484961924050668
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7753532086610834,
+            "std": 0.030901250489240088
+          },
+          "recall": {
+            "mean": 0.5234892449797153,
+            "std": 0.025481386722552027
+          },
+          "roc_auc": {
+            "mean": 0.8770316825681862,
+            "std": 0.007104700588201969
+          }
+        },
+        "rank_key": [
+          0.5306911459433443,
+          0.5234892449797153,
+          0.7753532086610834
+        ]
+      },
+      {
+        "method": "mutual_information",
+        "requested_count": 150,
+        "selected_feature_count": 150,
+        "selected_features": [
+          "area_adjusted_exudate_count",
+          "area_adjusted_ma_count",
+          "ma_density_per_retinal_area",
+          "area_adjusted_hemorrhage_count",
+          "hsv_v_min",
+          "lab_color_a_min",
+          "rgb_b_std",
+          "wavelet_vertical_energy",
+          "vessel_length",
+          "vessel_skeleton_length",
+          "lbp_uniform_ratio",
+          "lab_b_exudate_std",
+          "rgb_b_max",
+          "hsv_s_std",
+          "fft_low_frequency_ratio",
+          "wavelet_diagonal_energy",
+          "lab_color_b_min",
+          "lbp_entropy",
+          "glcm_contrast_90",
+          "quality_blur_score",
+          "all_lesion_circularity_mean",
+          "texture_skewness",
+          "hard_exudate_brightness_std",
+          "all_lesion_eccentricity_mean",
+          "fft_mid_frequency_ratio",
+          "temporal_lesion_density",
+          "lesion_density_score",
+          "fft_high_frequency_ratio",
+          "lab_color_l_std",
+          "hsv_s_entropy",
+          "vessel_endpoint_count",
+          "rgb_g_max",
+          "lab_color_b_max",
+          "hsv_v_std",
+          "exudate_area",
+          "lab_color_l_max",
+          "inferior_texture_mean",
+          "texture_mean",
+          "rgb_r_std",
+          "rgb_r_min",
+          "wavelet_detail_energy",
+          "hard_exudate_area",
+          "all_lesion_solidity_mean",
+          "temporal_texture_mean",
+          "exudate_count",
+          "temporal_lesion_count",
+          "quality_sharpness",
+          "advanced_dr_indicator_score",
+          "hard_exudate_brightness_mean",
+          "hemorrhage_to_exudate_ratio",
+          "hard_exudate_coverage_pct",
+          "exudate_density",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "texture_std",
+          "texture_variance",
+          "lab_color_l_min",
+          "stage_progression_score",
+          "superior_lesion_density",
+          "vessel_fragmentation_index",
+          "exudate_burden_score",
+          "rgb_g_std",
+          "quality_contrast",
+          "vessel_density",
+          "hsv_s_min",
+          "vessel_area_ratio",
+          "hsv_h_std",
+          "fft_dominant_radius_mean",
+          "hard_exudate_count",
+          "lab_color_a_max",
+          "glcm_contrast",
+          "fft_dominant_radius_std",
+          "rgb_g_mean",
+          "glcm_contrast_45",
+          "quality_brightness",
+          "all_lesion_area",
+          "hard_exudate_distance_to_macula_mean",
+          "vessel_curvature_mean",
+          "rgb_b_entropy",
+          "quality_snr",
+          "combined_lesion_burden",
+          "lbp_mean",
+          "local_texture_variance_mean",
+          "all_lesion_compactness_mean",
+          "glcm_dissimilarity",
+          "ma_to_exudate_ratio",
+          "superior_lesion_count",
+          "inferior_texture_std",
+          "glcm_correlation",
+          "glcm_homogeneity",
+          "vessel_abnormality_score",
+          "lab_color_b_entropy",
+          "hsv_h_max",
+          "lesion_vessel_interaction",
+          "referable_lesion_score",
+          "lbp_std",
+          "lab_b_exudate_mean",
+          "hemorrhage_count",
+          "nasal_texture_std",
+          "inferior_vessel_density",
+          "hsv_h_mean",
+          "temporal_texture_std",
+          "superior_texture_std",
+          "lab_color_l_mean",
+          "lab_color_b_std",
+          "lab_color_a_entropy",
+          "lab_b_std",
+          "hard_exudate_max_area",
+          "lab_color_b_mean",
+          "lab_b_mean",
+          "glcm_contrast_135",
+          "hsv_s_mean",
+          "neovascularization_likelihood_score",
+          "quality_adjusted_lesion_density",
+          "lab_color_a_std",
+          "nasal_texture_mean",
+          "temporal_vessel_density",
+          "rgb_b_min",
+          "inferior_lesion_density",
+          "texture_kurtosis",
+          "rgb_g_min",
+          "glcm_energy_45",
+          "hemorrhage_to_ma_ratio",
+          "texture_lesion_interaction",
+          "exudate_mean_area",
+          "glcm_energy_0",
+          "hard_exudate_mean_area",
+          "nasal_vessel_density",
+          "hsv_v_mean",
+          "wavelet_horizontal_energy",
+          "rgb_b_mean",
+          "ma_distance_to_optic_disc_mean",
+          "hard_exudate_texture_mean",
+          "glcm_energy_135",
+          "rgb_r_mean",
+          "glcm_entropy",
+          "lab_color_a_mean",
+          "hard_exudate_texture_std",
+          "vessel_branchpoint_count",
+          "vessel_tortuosity_std",
+          "total_lesion_count",
+          "glcm_energy",
+          "rgb_r_max",
+          "hsv_h_entropy",
+          "local_texture_variance_std",
+          "all_lesion_aspect_ratio_mean",
+          "hemorrhage_area",
+          "hemorrhage_retina_affected_pct",
+          "glcm_energy_90",
+          "hemorrhage_density",
+          "vessel_average_width"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7527083909423296,
+            "std": 0.017666999294365063
+          },
+          "balanced_accuracy": {
+            "mean": 0.5125257153457533,
+            "std": 0.030003294708037993
+          },
+          "brier_score": {
+            "mean": 0.4056945753636357,
+            "std": 0.006531786016018722
+          },
+          "cohen_kappa": {
+            "mean": 0.6099732973765505,
+            "std": 0.029628687486876745
+          },
+          "f1": {
+            "mean": 0.5258019189025207,
+            "std": 0.030475620928768755
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.376379389805512,
+            "std": 0.038898840179594815
+          },
+          "precision": {
+            "mean": 0.5802799093956269,
+            "std": 0.02940152190382348
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7715247771837008,
+            "std": 0.034011071186014555
+          },
+          "recall": {
+            "mean": 0.5125257153457533,
+            "std": 0.030003294708037993
+          },
+          "roc_auc": {
+            "mean": 0.875710118095556,
+            "std": 0.006153208684050744
+          }
+        },
+        "rank_key": [
+          0.5258019189025207,
+          0.5125257153457533,
+          0.7715247771837008
+        ]
+      },
+      {
+        "method": "shap",
+        "requested_count": 150,
+        "selected_feature_count": 150,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_solidity_mean",
+          "all_lesion_eccentricity_mean",
+          "exudate_density",
+          "all_lesion_compactness_mean",
+          "hard_exudate_area",
+          "hard_exudate_count",
+          "hard_exudate_coverage_pct",
+          "exudate_area",
+          "wavelet_vertical_energy",
+          "lab_b_exudate_std",
+          "area_adjusted_exudate_count",
+          "lbp_std",
+          "fft_mid_frequency_ratio",
+          "texture_skewness",
+          "fft_high_frequency_ratio",
+          "texture_mean",
+          "exudate_count",
+          "fft_low_frequency_ratio",
+          "glcm_energy_45",
+          "lesion_density_score",
+          "hsv_v_min",
+          "superior_lesion_count",
+          "rgb_g_max",
+          "lab_color_a_min",
+          "lbp_entropy",
+          "nasal_texture_mean",
+          "vessel_abnormality_score",
+          "texture_std",
+          "wavelet_diagonal_energy",
+          "temporal_lesion_density",
+          "lab_color_l_min",
+          "hard_exudate_brightness_mean",
+          "temporal_lesion_count",
+          "glcm_energy_135",
+          "vessel_length",
+          "exudate_burden_score",
+          "hard_exudate_brightness_std",
+          "total_lesion_count",
+          "superior_texture_mean",
+          "glcm_energy",
+          "inferior_texture_mean",
+          "rgb_b_std",
+          "lbp_uniform_ratio",
+          "texture_kurtosis",
+          "all_lesion_aspect_ratio_mean",
+          "combined_lesion_burden",
+          "hsv_s_std",
+          "temporal_texture_mean",
+          "vessel_endpoint_count",
+          "vessel_skeleton_length",
+          "glcm_energy_0",
+          "stage_progression_score",
+          "glcm_correlation",
+          "vessel_fragmentation_index",
+          "fft_dominant_radius_std",
+          "all_lesion_area",
+          "rgb_b_max",
+          "lbp_mean",
+          "lab_color_b_min",
+          "lab_color_l_max",
+          "nasal_texture_std",
+          "glcm_entropy",
+          "glcm_homogeneity",
+          "temporal_texture_std",
+          "glcm_energy_90",
+          "texture_variance",
+          "wavelet_approx_energy",
+          "wavelet_detail_energy",
+          "nasal_vessel_density",
+          "vessel_area_ratio",
+          "rgb_r_min",
+          "lab_color_a_max",
+          "quality_blur_score",
+          "lab_color_b_entropy",
+          "ma_to_exudate_ratio",
+          "quality_snr",
+          "quality_sharpness",
+          "hard_exudate_max_area",
+          "all_lesion_perimeter_mean",
+          "glcm_dissimilarity",
+          "inferior_texture_std",
+          "hard_exudate_distance_to_macula_mean",
+          "vessel_density",
+          "lab_color_a_entropy",
+          "hsv_s_min",
+          "rgb_g_mean",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "advanced_dr_indicator_score",
+          "hemorrhage_to_exudate_ratio",
+          "rgb_r_mean",
+          "hsv_h_std",
+          "glcm_contrast_90",
+          "texture_lesion_interaction",
+          "lesion_vessel_interaction",
+          "ma_temporal_count",
+          "inferior_lesion_count",
+          "lab_color_l_mean",
+          "hsv_s_entropy",
+          "wavelet_horizontal_energy",
+          "lab_color_a_mean",
+          "glcm_contrast_0",
+          "superior_texture_std",
+          "vessel_curvature_std",
+          "vessel_curvature_mean",
+          "rgb_g_min",
+          "fft_energy",
+          "nasal_lesion_count",
+          "lab_color_b_mean",
+          "quality_brightness",
+          "ma_nasal_count",
+          "local_texture_variance_std",
+          "vessel_tortuosity_mean",
+          "hard_exudate_texture_mean",
+          "lab_color_b_std",
+          "superior_lesion_density",
+          "quality_adjusted_lesion_density",
+          "rgb_b_mean",
+          "hsv_v_mean",
+          "hsv_h_mean",
+          "lab_color_l_std",
+          "lab_color_a_std",
+          "lab_b_mean",
+          "fft_dominant_radius_mean",
+          "lab_color_b_max",
+          "inferior_vessel_density",
+          "ma_superior_count",
+          "ma_distance_to_optic_disc_min",
+          "hsv_s_mean",
+          "hard_exudate_mean_area",
+          "hemorrhage_count",
+          "superior_vessel_density",
+          "area_adjusted_hemorrhage_count",
+          "vessel_tortuosity_std",
+          "rgb_r_std",
+          "hsv_v_std",
+          "ma_distance_to_optic_disc_mean",
+          "local_texture_variance_mean",
+          "vessel_curvature_max",
+          "ma_inferior_count",
+          "lab_b_std",
+          "ma_max_area",
+          "exudate_mean_area",
+          "nasal_lesion_density",
+          "hemorrhage_area",
+          "vessel_branchpoint_count",
+          "hsv_h_entropy",
+          "rgb_r_entropy",
+          "ma_area",
+          "vessel_tortuosity_max"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7464012044120809,
+            "std": 0.010168595774419985
+          },
+          "balanced_accuracy": {
+            "mean": 0.5082671001092487,
+            "std": 0.02529737942608002
+          },
+          "brier_score": {
+            "mean": 0.4085783199227663,
+            "std": 0.005521118823002087
+          },
+          "cohen_kappa": {
+            "mean": 0.6004326290677195,
+            "std": 0.0189047315625115
+          },
+          "f1": {
+            "mean": 0.5236328255779907,
+            "std": 0.0256523456405101
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.38303561004086395,
+            "std": 0.026078691081984916
+          },
+          "precision": {
+            "mean": 0.5707959681707016,
+            "std": 0.019715279213231983
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7730736832640196,
+            "std": 0.02516448645389411
+          },
+          "recall": {
+            "mean": 0.5082671001092487,
+            "std": 0.02529737942608002
+          },
+          "roc_auc": {
+            "mean": 0.8765968599221704,
+            "std": 0.0059058197919830205
+          }
+        },
+        "rank_key": [
+          0.5236328255779907,
+          0.5082671001092487,
+          0.7730736832640196
+        ]
+      },
+      {
+        "method": "shap",
+        "requested_count": "all",
+        "selected_feature_count": 203,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_solidity_mean",
+          "all_lesion_eccentricity_mean",
+          "exudate_density",
+          "all_lesion_compactness_mean",
+          "hard_exudate_area",
+          "hard_exudate_count",
+          "hard_exudate_coverage_pct",
+          "exudate_area",
+          "wavelet_vertical_energy",
+          "lab_b_exudate_std",
+          "area_adjusted_exudate_count",
+          "lbp_std",
+          "fft_mid_frequency_ratio",
+          "texture_skewness",
+          "fft_high_frequency_ratio",
+          "texture_mean",
+          "exudate_count",
+          "fft_low_frequency_ratio",
+          "glcm_energy_45",
+          "lesion_density_score",
+          "hsv_v_min",
+          "superior_lesion_count",
+          "rgb_g_max",
+          "lab_color_a_min",
+          "lbp_entropy",
+          "nasal_texture_mean",
+          "vessel_abnormality_score",
+          "texture_std",
+          "wavelet_diagonal_energy",
+          "temporal_lesion_density",
+          "lab_color_l_min",
+          "hard_exudate_brightness_mean",
+          "temporal_lesion_count",
+          "glcm_energy_135",
+          "vessel_length",
+          "exudate_burden_score",
+          "hard_exudate_brightness_std",
+          "total_lesion_count",
+          "superior_texture_mean",
+          "glcm_energy",
+          "inferior_texture_mean",
+          "rgb_b_std",
+          "lbp_uniform_ratio",
+          "texture_kurtosis",
+          "all_lesion_aspect_ratio_mean",
+          "combined_lesion_burden",
+          "hsv_s_std",
+          "temporal_texture_mean",
+          "vessel_endpoint_count",
+          "vessel_skeleton_length",
+          "glcm_energy_0",
+          "stage_progression_score",
+          "glcm_correlation",
+          "vessel_fragmentation_index",
+          "fft_dominant_radius_std",
+          "all_lesion_area",
+          "rgb_b_max",
+          "lbp_mean",
+          "lab_color_b_min",
+          "lab_color_l_max",
+          "nasal_texture_std",
+          "glcm_entropy",
+          "glcm_homogeneity",
+          "temporal_texture_std",
+          "glcm_energy_90",
+          "texture_variance",
+          "wavelet_approx_energy",
+          "wavelet_detail_energy",
+          "nasal_vessel_density",
+          "vessel_area_ratio",
+          "rgb_r_min",
+          "lab_color_a_max",
+          "quality_blur_score",
+          "lab_color_b_entropy",
+          "ma_to_exudate_ratio",
+          "quality_snr",
+          "quality_sharpness",
+          "hard_exudate_max_area",
+          "all_lesion_perimeter_mean",
+          "glcm_dissimilarity",
+          "inferior_texture_std",
+          "hard_exudate_distance_to_macula_mean",
+          "vessel_density",
+          "lab_color_a_entropy",
+          "hsv_s_min",
+          "rgb_g_mean",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "advanced_dr_indicator_score",
+          "hemorrhage_to_exudate_ratio",
+          "rgb_r_mean",
+          "hsv_h_std",
+          "glcm_contrast_90",
+          "texture_lesion_interaction",
+          "lesion_vessel_interaction",
+          "ma_temporal_count",
+          "inferior_lesion_count",
+          "lab_color_l_mean",
+          "hsv_s_entropy",
+          "wavelet_horizontal_energy",
+          "lab_color_a_mean",
+          "glcm_contrast_0",
+          "superior_texture_std",
+          "vessel_curvature_std",
+          "vessel_curvature_mean",
+          "rgb_g_min",
+          "fft_energy",
+          "nasal_lesion_count",
+          "lab_color_b_mean",
+          "quality_brightness",
+          "ma_nasal_count",
+          "local_texture_variance_std",
+          "vessel_tortuosity_mean",
+          "hard_exudate_texture_mean",
+          "lab_color_b_std",
+          "superior_lesion_density",
+          "quality_adjusted_lesion_density",
+          "rgb_b_mean",
+          "hsv_v_mean",
+          "hsv_h_mean",
+          "lab_color_l_std",
+          "lab_color_a_std",
+          "lab_b_mean",
+          "fft_dominant_radius_mean",
+          "lab_color_b_max",
+          "inferior_vessel_density",
+          "ma_superior_count",
+          "ma_distance_to_optic_disc_min",
+          "hsv_s_mean",
+          "hard_exudate_mean_area",
+          "hemorrhage_count",
+          "superior_vessel_density",
+          "area_adjusted_hemorrhage_count",
+          "vessel_tortuosity_std",
+          "rgb_r_std",
+          "hsv_v_std",
+          "ma_distance_to_optic_disc_mean",
+          "local_texture_variance_mean",
+          "vessel_curvature_max",
+          "ma_inferior_count",
+          "lab_b_std",
+          "ma_max_area",
+          "exudate_mean_area",
+          "nasal_lesion_density",
+          "hemorrhage_area",
+          "vessel_branchpoint_count",
+          "hsv_h_entropy",
+          "rgb_r_entropy",
+          "ma_area",
+          "vessel_tortuosity_max",
+          "ma_density",
+          "lab_b_exudate_mean",
+          "glcm_contrast_45",
+          "vessel_complexity_score",
+          "temporal_vessel_density",
+          "area_adjusted_ma_count",
+          "rgb_b_entropy",
+          "rgb_g_entropy",
+          "hard_exudate_texture_std",
+          "hsv_v_entropy",
+          "hemorrhage_retina_affected_pct",
+          "inferior_lesion_density",
+          "lab_color_l_entropy",
+          "quality_contrast",
+          "neovascularization_likelihood_score",
+          "hemorrhage_density",
+          "ma_density_per_retinal_area",
+          "vessel_branching_count",
+          "rgb_g_std",
+          "ma_count",
+          "glcm_contrast_135",
+          "vessel_average_width",
+          "glcm_contrast",
+          "all_lesion_convex_hull_area_mean",
+          "rgb_r_max",
+          "ma_mean_area",
+          "hemorrhage_mean_area",
+          "rgb_b_min",
+          "hsv_h_max",
+          "hsv_v_max",
+          "referable_lesion_score",
+          "hemorrhage_to_ma_ratio",
+          "hemorrhage_largest_area",
+          "hsv_s_max",
+          "cotton_wool_circularity_mean",
+          "cotton_wool_solidity_mean",
+          "cotton_wool_aspect_ratio_mean",
+          "cotton_wool_distribution_entropy",
+          "cotton_wool_mean_area",
+          "soft_exudate_brightness_mean",
+          "soft_exudate_distance_to_macula_mean",
+          "cotton_wool_count",
+          "soft_exudate_distance_to_optic_disc_mean",
+          "cotton_wool_area",
+          "soft_exudate_brightness_std",
+          "soft_exudate_texture_mean",
+          "soft_exudate_texture_std",
+          "soft_exudate_area",
+          "soft_exudate_count",
+          "soft_exudate_coverage_pct",
+          "soft_exudate_max_area",
+          "soft_exudate_mean_area",
+          "hsv_h_min"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7488555012750792,
+            "std": 0.013550292890329838
+          },
+          "balanced_accuracy": {
+            "mean": 0.5038467052621939,
+            "std": 0.02678726097500956
+          },
+          "brier_score": {
+            "mean": 0.41313414005005045,
+            "std": 0.006041836344317626
+          },
+          "cohen_kappa": {
+            "mean": 0.6030887511223836,
+            "std": 0.023422469173673133
+          },
+          "f1": {
+            "mean": 0.5199017781920163,
+            "std": 0.027925094179673874
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.3760248256367714,
+            "std": 0.0338979962928643
+          },
+          "precision": {
+            "mean": 0.5787597289496145,
+            "std": 0.037626229787072474
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7771441404164664,
+            "std": 0.03023283778574111
+          },
+          "recall": {
+            "mean": 0.5038467052621939,
+            "std": 0.02678726097500956
+          },
+          "roc_auc": {
+            "mean": 0.8742274189283249,
+            "std": 0.0072611475135613834
+          }
+        },
+        "rank_key": [
+          0.5199017781920163,
+          0.5038467052621939,
+          0.7771441404164664
+        ]
+      },
+      {
+        "method": "mutual_information",
+        "requested_count": "all",
+        "selected_feature_count": 203,
+        "selected_features": [
+          "area_adjusted_exudate_count",
+          "area_adjusted_ma_count",
+          "ma_density_per_retinal_area",
+          "area_adjusted_hemorrhage_count",
+          "hsv_v_min",
+          "lab_color_a_min",
+          "rgb_b_std",
+          "wavelet_vertical_energy",
+          "vessel_length",
+          "vessel_skeleton_length",
+          "lbp_uniform_ratio",
+          "lab_b_exudate_std",
+          "rgb_b_max",
+          "hsv_s_std",
+          "fft_low_frequency_ratio",
+          "wavelet_diagonal_energy",
+          "lab_color_b_min",
+          "lbp_entropy",
+          "glcm_contrast_90",
+          "quality_blur_score",
+          "all_lesion_circularity_mean",
+          "texture_skewness",
+          "hard_exudate_brightness_std",
+          "all_lesion_eccentricity_mean",
+          "fft_mid_frequency_ratio",
+          "temporal_lesion_density",
+          "lesion_density_score",
+          "fft_high_frequency_ratio",
+          "lab_color_l_std",
+          "hsv_s_entropy",
+          "vessel_endpoint_count",
+          "rgb_g_max",
+          "lab_color_b_max",
+          "hsv_v_std",
+          "exudate_area",
+          "lab_color_l_max",
+          "inferior_texture_mean",
+          "texture_mean",
+          "rgb_r_std",
+          "rgb_r_min",
+          "wavelet_detail_energy",
+          "hard_exudate_area",
+          "all_lesion_solidity_mean",
+          "temporal_texture_mean",
+          "exudate_count",
+          "temporal_lesion_count",
+          "quality_sharpness",
+          "advanced_dr_indicator_score",
+          "hard_exudate_brightness_mean",
+          "hemorrhage_to_exudate_ratio",
+          "hard_exudate_coverage_pct",
+          "exudate_density",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "texture_std",
+          "texture_variance",
+          "lab_color_l_min",
+          "stage_progression_score",
+          "superior_lesion_density",
+          "vessel_fragmentation_index",
+          "exudate_burden_score",
+          "rgb_g_std",
+          "quality_contrast",
+          "vessel_density",
+          "hsv_s_min",
+          "vessel_area_ratio",
+          "hsv_h_std",
+          "fft_dominant_radius_mean",
+          "hard_exudate_count",
+          "lab_color_a_max",
+          "glcm_contrast",
+          "fft_dominant_radius_std",
+          "rgb_g_mean",
+          "glcm_contrast_45",
+          "quality_brightness",
+          "all_lesion_area",
+          "hard_exudate_distance_to_macula_mean",
+          "vessel_curvature_mean",
+          "rgb_b_entropy",
+          "quality_snr",
+          "combined_lesion_burden",
+          "lbp_mean",
+          "local_texture_variance_mean",
+          "all_lesion_compactness_mean",
+          "glcm_dissimilarity",
+          "ma_to_exudate_ratio",
+          "superior_lesion_count",
+          "inferior_texture_std",
+          "glcm_correlation",
+          "glcm_homogeneity",
+          "vessel_abnormality_score",
+          "lab_color_b_entropy",
+          "hsv_h_max",
+          "lesion_vessel_interaction",
+          "referable_lesion_score",
+          "lbp_std",
+          "lab_b_exudate_mean",
+          "hemorrhage_count",
+          "nasal_texture_std",
+          "inferior_vessel_density",
+          "hsv_h_mean",
+          "temporal_texture_std",
+          "superior_texture_std",
+          "lab_color_l_mean",
+          "lab_color_b_std",
+          "lab_color_a_entropy",
+          "lab_b_std",
+          "hard_exudate_max_area",
+          "lab_color_b_mean",
+          "lab_b_mean",
+          "glcm_contrast_135",
+          "hsv_s_mean",
+          "neovascularization_likelihood_score",
+          "quality_adjusted_lesion_density",
+          "lab_color_a_std",
+          "nasal_texture_mean",
+          "temporal_vessel_density",
+          "rgb_b_min",
+          "inferior_lesion_density",
+          "texture_kurtosis",
+          "rgb_g_min",
+          "glcm_energy_45",
+          "hemorrhage_to_ma_ratio",
+          "texture_lesion_interaction",
+          "exudate_mean_area",
+          "glcm_energy_0",
+          "hard_exudate_mean_area",
+          "nasal_vessel_density",
+          "hsv_v_mean",
+          "wavelet_horizontal_energy",
+          "rgb_b_mean",
+          "ma_distance_to_optic_disc_mean",
+          "hard_exudate_texture_mean",
+          "glcm_energy_135",
+          "rgb_r_mean",
+          "glcm_entropy",
+          "lab_color_a_mean",
+          "hard_exudate_texture_std",
+          "vessel_branchpoint_count",
+          "vessel_tortuosity_std",
+          "total_lesion_count",
+          "glcm_energy",
+          "rgb_r_max",
+          "hsv_h_entropy",
+          "local_texture_variance_std",
+          "all_lesion_aspect_ratio_mean",
+          "hemorrhage_area",
+          "hemorrhage_retina_affected_pct",
+          "glcm_energy_90",
+          "hemorrhage_density",
+          "vessel_average_width",
+          "vessel_curvature_std",
+          "superior_texture_mean",
+          "nasal_lesion_density",
+          "hsv_v_max",
+          "fft_energy",
+          "wavelet_approx_energy",
+          "ma_distance_to_optic_disc_min",
+          "vessel_branching_count",
+          "vessel_tortuosity_max",
+          "hemorrhage_mean_area",
+          "soft_exudate_texture_mean",
+          "soft_exudate_brightness_std",
+          "soft_exudate_area",
+          "rgb_r_entropy",
+          "cotton_wool_distribution_entropy",
+          "ma_density",
+          "all_lesion_convex_hull_area_mean",
+          "cotton_wool_aspect_ratio_mean",
+          "soft_exudate_count",
+          "soft_exudate_distance_to_optic_disc_mean",
+          "hsv_v_entropy",
+          "vessel_tortuosity_mean",
+          "ma_nasal_count",
+          "nasal_lesion_count",
+          "ma_count",
+          "glcm_contrast_0",
+          "hemorrhage_largest_area",
+          "superior_vessel_density",
+          "ma_max_area",
+          "soft_exudate_mean_area",
+          "vessel_complexity_score",
+          "soft_exudate_coverage_pct",
+          "cotton_wool_area",
+          "ma_superior_count",
+          "soft_exudate_brightness_mean",
+          "all_lesion_perimeter_mean",
+          "inferior_lesion_count",
+          "lab_color_l_entropy",
+          "ma_area",
+          "vessel_curvature_max",
+          "ma_temporal_count",
+          "ma_mean_area",
+          "hsv_h_min",
+          "hsv_s_max",
+          "rgb_g_entropy",
+          "cotton_wool_circularity_mean",
+          "soft_exudate_distance_to_macula_mean",
+          "soft_exudate_texture_std",
+          "soft_exudate_max_area",
+          "cotton_wool_count",
+          "cotton_wool_mean_area",
+          "cotton_wool_solidity_mean",
+          "ma_inferior_count"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7484997081144191,
+            "std": 0.016939495090280764
+          },
+          "balanced_accuracy": {
+            "mean": 0.5000903339905737,
+            "std": 0.029646167207610097
+          },
+          "brier_score": {
+            "mean": 0.4120902276942151,
+            "std": 0.0072514574035627746
+          },
+          "cohen_kappa": {
+            "mean": 0.6016306073612576,
+            "std": 0.028591976321806635
+          },
+          "f1": {
+            "mean": 0.5159988539802461,
+            "std": 0.032683130089808755
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.3777835130734015,
+            "std": 0.039378748540242876
+          },
+          "precision": {
+            "mean": 0.5736652270227725,
+            "std": 0.03785820135630653
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7741416832794531,
+            "std": 0.03609775090156869
+          },
+          "recall": {
+            "mean": 0.5000903339905737,
+            "std": 0.029646167207610097
+          },
+          "roc_auc": {
+            "mean": 0.8741714799702139,
+            "std": 0.009096737778007466
+          }
+        },
+        "rank_key": [
+          0.5159988539802461,
+          0.5000903339905737,
+          0.7741416832794531
+        ]
+      },
+      {
+        "method": "random_forest",
+        "requested_count": 150,
+        "selected_feature_count": 150,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_eccentricity_mean",
+          "all_lesion_compactness_mean",
+          "all_lesion_solidity_mean",
+          "lesion_density_score",
+          "all_lesion_area",
+          "combined_lesion_burden",
+          "exudate_density",
+          "hard_exudate_coverage_pct",
+          "lesion_vessel_interaction",
+          "hard_exudate_brightness_mean",
+          "nasal_texture_mean",
+          "lbp_std",
+          "hsv_h_mean",
+          "area_adjusted_exudate_count",
+          "glcm_energy_45",
+          "temporal_lesion_density",
+          "texture_kurtosis",
+          "glcm_correlation",
+          "texture_skewness",
+          "all_lesion_perimeter_mean",
+          "quality_blur_score",
+          "lab_b_exudate_std",
+          "nasal_vessel_density",
+          "texture_mean",
+          "superior_texture_mean",
+          "hsv_h_std",
+          "total_lesion_count",
+          "quality_adjusted_lesion_density",
+          "exudate_area",
+          "lbp_entropy",
+          "vessel_curvature_mean",
+          "rgb_b_std",
+          "all_lesion_aspect_ratio_mean",
+          "exudate_burden_score",
+          "hard_exudate_area",
+          "vessel_area_ratio",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "advanced_dr_indicator_score",
+          "vessel_density",
+          "wavelet_diagonal_energy",
+          "lbp_mean",
+          "quality_snr",
+          "ma_distance_to_optic_disc_min",
+          "fft_high_frequency_ratio",
+          "wavelet_vertical_energy",
+          "fft_low_frequency_ratio",
+          "hard_exudate_distance_to_macula_mean",
+          "stage_progression_score",
+          "vessel_skeleton_length",
+          "glcm_energy",
+          "hard_exudate_max_area",
+          "fft_dominant_radius_std",
+          "temporal_texture_mean",
+          "hard_exudate_brightness_std",
+          "glcm_energy_0",
+          "hard_exudate_count",
+          "vessel_curvature_std",
+          "lbp_uniform_ratio",
+          "exudate_mean_area",
+          "vessel_length",
+          "glcm_energy_90",
+          "local_texture_variance_std",
+          "superior_vessel_density",
+          "vessel_tortuosity_mean",
+          "hard_exudate_mean_area",
+          "vessel_tortuosity_max",
+          "glcm_energy_135",
+          "temporal_texture_std",
+          "all_lesion_convex_hull_area_mean",
+          "inferior_texture_mean",
+          "temporal_lesion_count",
+          "inferior_texture_std",
+          "fft_mid_frequency_ratio",
+          "lab_color_a_entropy",
+          "hsv_s_std",
+          "rgb_b_entropy",
+          "exudate_count",
+          "lab_color_a_std",
+          "hemorrhage_to_exudate_ratio",
+          "vessel_tortuosity_std",
+          "nasal_lesion_density",
+          "temporal_vessel_density",
+          "rgb_b_mean",
+          "ma_distance_to_optic_disc_mean",
+          "glcm_contrast_90",
+          "hsv_h_entropy",
+          "rgb_b_max",
+          "glcm_homogeneity",
+          "vessel_abnormality_score",
+          "texture_lesion_interaction",
+          "hsv_s_entropy",
+          "hard_exudate_texture_mean",
+          "vessel_fragmentation_index",
+          "ma_to_exudate_ratio",
+          "nasal_lesion_count",
+          "lab_color_b_entropy",
+          "hsv_s_mean",
+          "quality_brightness",
+          "fft_dominant_radius_mean",
+          "glcm_entropy",
+          "lab_color_a_mean",
+          "superior_lesion_density",
+          "lab_color_l_max",
+          "rgb_g_mean",
+          "glcm_contrast_0",
+          "lab_color_a_max",
+          "superior_lesion_count",
+          "lab_b_exudate_mean",
+          "lab_color_l_mean",
+          "hemorrhage_mean_area",
+          "inferior_lesion_density",
+          "inferior_vessel_density",
+          "vessel_complexity_score",
+          "area_adjusted_hemorrhage_count",
+          "rgb_r_mean",
+          "lab_color_a_min",
+          "hemorrhage_largest_area",
+          "hard_exudate_texture_std",
+          "vessel_average_width",
+          "lab_color_b_std",
+          "vessel_endpoint_count",
+          "hemorrhage_density",
+          "hemorrhage_area",
+          "rgb_r_std",
+          "lab_color_b_min",
+          "hemorrhage_retina_affected_pct",
+          "ma_nasal_count",
+          "superior_texture_std",
+          "ma_area",
+          "lab_b_std",
+          "neovascularization_likelihood_score",
+          "inferior_lesion_count",
+          "nasal_texture_std",
+          "quality_sharpness",
+          "lab_color_b_max",
+          "ma_mean_area",
+          "texture_variance",
+          "hsv_v_std",
+          "rgb_g_max",
+          "lab_b_mean",
+          "hsv_v_mean",
+          "glcm_contrast_135",
+          "vessel_branchpoint_count",
+          "glcm_dissimilarity",
+          "lab_color_b_mean",
+          "area_adjusted_ma_count",
+          "ma_max_area",
+          "hsv_v_entropy",
+          "fft_energy"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7432383937075613,
+            "std": 0.019382722714311906
+          },
+          "balanced_accuracy": {
+            "mean": 0.4991128121996943,
+            "std": 0.03630415923597034
+          },
+          "brier_score": {
+            "mean": 0.41682095623657106,
+            "std": 0.006823694269066229
+          },
+          "cohen_kappa": {
+            "mean": 0.5944012939154166,
+            "std": 0.032998249826722476
+          },
+          "f1": {
+            "mean": 0.513918063485738,
+            "std": 0.03944113221810902
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.3865529849141242,
+            "std": 0.039667925065170924
+          },
+          "precision": {
+            "mean": 0.5605074365610538,
+            "std": 0.04266435868817128
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7700571705117006,
+            "std": 0.03267826018763435
+          },
+          "recall": {
+            "mean": 0.4991128121996943,
+            "std": 0.03630415923597034
+          },
+          "roc_auc": {
+            "mean": 0.8728329023340425,
+            "std": 0.009158621148742432
+          }
+        },
+        "rank_key": [
+          0.513918063485738,
+          0.4991128121996943,
+          0.7700571705117006
+        ]
+      },
+      {
+        "method": "mutual_information",
+        "requested_count": "all_203",
+        "selected_feature_count": 203,
+        "selected_features": [
+          "ma_count",
+          "ma_area",
+          "ma_density",
+          "ma_mean_area",
+          "exudate_count",
+          "exudate_area",
+          "exudate_density",
+          "exudate_mean_area",
+          "vessel_density",
+          "vessel_skeleton_length",
+          "vessel_endpoint_count",
+          "vessel_branchpoint_count",
+          "vessel_tortuosity_mean",
+          "vessel_tortuosity_max",
+          "vessel_tortuosity_std",
+          "lab_b_mean",
+          "lab_b_std",
+          "lab_b_exudate_mean",
+          "lab_b_exudate_std",
+          "glcm_contrast",
+          "glcm_homogeneity",
+          "glcm_energy",
+          "glcm_contrast_0",
+          "glcm_contrast_45",
+          "glcm_contrast_90",
+          "glcm_contrast_135",
+          "glcm_energy_0",
+          "glcm_energy_45",
+          "glcm_energy_90",
+          "glcm_energy_135",
+          "vessel_area_ratio",
+          "vessel_length",
+          "vessel_branching_count",
+          "vessel_average_width",
+          "vessel_fragmentation_index",
+          "vessel_complexity_score",
+          "vessel_curvature_mean",
+          "vessel_curvature_std",
+          "vessel_curvature_max",
+          "hemorrhage_count",
+          "hemorrhage_area",
+          "hemorrhage_largest_area",
+          "hemorrhage_mean_area",
+          "hemorrhage_density",
+          "hemorrhage_retina_affected_pct",
+          "ma_max_area",
+          "ma_superior_count",
+          "ma_inferior_count",
+          "ma_nasal_count",
+          "ma_temporal_count",
+          "ma_distance_to_optic_disc_mean",
+          "ma_distance_to_optic_disc_min",
+          "ma_density_per_retinal_area",
+          "hard_exudate_count",
+          "hard_exudate_area",
+          "hard_exudate_mean_area",
+          "hard_exudate_max_area",
+          "hard_exudate_brightness_mean",
+          "hard_exudate_brightness_std",
+          "hard_exudate_texture_mean",
+          "hard_exudate_texture_std",
+          "hard_exudate_coverage_pct",
+          "hard_exudate_distance_to_macula_mean",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "soft_exudate_count",
+          "soft_exudate_area",
+          "soft_exudate_mean_area",
+          "soft_exudate_max_area",
+          "soft_exudate_brightness_mean",
+          "soft_exudate_brightness_std",
+          "soft_exudate_texture_mean",
+          "soft_exudate_texture_std",
+          "soft_exudate_coverage_pct",
+          "soft_exudate_distance_to_macula_mean",
+          "soft_exudate_distance_to_optic_disc_mean",
+          "cotton_wool_count",
+          "cotton_wool_area",
+          "cotton_wool_mean_area",
+          "cotton_wool_circularity_mean",
+          "cotton_wool_solidity_mean",
+          "cotton_wool_aspect_ratio_mean",
+          "cotton_wool_distribution_entropy",
+          "glcm_correlation",
+          "glcm_dissimilarity",
+          "glcm_entropy",
+          "lbp_uniform_ratio",
+          "lbp_entropy",
+          "lbp_mean",
+          "lbp_std",
+          "local_texture_variance_mean",
+          "local_texture_variance_std",
+          "texture_mean",
+          "texture_variance",
+          "texture_std",
+          "texture_skewness",
+          "texture_kurtosis",
+          "rgb_r_mean",
+          "rgb_r_std",
+          "rgb_r_min",
+          "rgb_r_max",
+          "rgb_r_entropy",
+          "rgb_g_mean",
+          "rgb_g_std",
+          "rgb_g_min",
+          "rgb_g_max",
+          "rgb_g_entropy",
+          "rgb_b_mean",
+          "rgb_b_std",
+          "rgb_b_min",
+          "rgb_b_max",
+          "rgb_b_entropy",
+          "hsv_h_mean",
+          "hsv_h_std",
+          "hsv_h_min",
+          "hsv_h_max",
+          "hsv_h_entropy",
+          "hsv_s_mean",
+          "hsv_s_std",
+          "hsv_s_min",
+          "hsv_s_max",
+          "hsv_s_entropy",
+          "hsv_v_mean",
+          "hsv_v_std",
+          "hsv_v_min",
+          "hsv_v_max",
+          "hsv_v_entropy",
+          "lab_color_l_mean",
+          "lab_color_l_std",
+          "lab_color_l_min",
+          "lab_color_l_max",
+          "lab_color_l_entropy",
+          "lab_color_a_mean",
+          "lab_color_a_std",
+          "lab_color_a_min",
+          "lab_color_a_max",
+          "lab_color_a_entropy",
+          "lab_color_b_mean",
+          "lab_color_b_std",
+          "lab_color_b_min",
+          "lab_color_b_max",
+          "lab_color_b_entropy",
+          "fft_energy",
+          "fft_low_frequency_ratio",
+          "fft_mid_frequency_ratio",
+          "fft_high_frequency_ratio",
+          "fft_dominant_radius_mean",
+          "fft_dominant_radius_std",
+          "wavelet_approx_energy",
+          "wavelet_horizontal_energy",
+          "wavelet_vertical_energy",
+          "wavelet_diagonal_energy",
+          "wavelet_detail_energy",
+          "all_lesion_area",
+          "all_lesion_perimeter_mean",
+          "all_lesion_circularity_mean",
+          "all_lesion_solidity_mean",
+          "all_lesion_eccentricity_mean",
+          "all_lesion_compactness_mean",
+          "all_lesion_aspect_ratio_mean",
+          "all_lesion_convex_hull_area_mean",
+          "superior_lesion_count",
+          "superior_lesion_density",
+          "superior_vessel_density",
+          "superior_texture_mean",
+          "superior_texture_std",
+          "inferior_lesion_count",
+          "inferior_lesion_density",
+          "inferior_vessel_density",
+          "inferior_texture_mean",
+          "inferior_texture_std",
+          "nasal_lesion_count",
+          "nasal_lesion_density",
+          "nasal_vessel_density",
+          "nasal_texture_mean",
+          "nasal_texture_std",
+          "temporal_lesion_count",
+          "temporal_lesion_density",
+          "temporal_vessel_density",
+          "temporal_texture_mean",
+          "temporal_texture_std",
+          "total_lesion_count",
+          "combined_lesion_burden",
+          "lesion_density_score",
+          "hemorrhage_to_ma_ratio",
+          "vessel_abnormality_score",
+          "exudate_burden_score",
+          "advanced_dr_indicator_score",
+          "neovascularization_likelihood_score",
+          "quality_blur_score",
+          "quality_sharpness",
+          "quality_brightness",
+          "quality_contrast",
+          "quality_snr",
+          "ma_to_exudate_ratio",
+          "hemorrhage_to_exudate_ratio",
+          "lesion_vessel_interaction",
+          "texture_lesion_interaction",
+          "quality_adjusted_lesion_density",
+          "area_adjusted_ma_count",
+          "area_adjusted_exudate_count",
+          "area_adjusted_hemorrhage_count",
+          "referable_lesion_score",
+          "stage_progression_score"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7428930469782161,
+            "std": 0.014978891877110843
+          },
+          "balanced_accuracy": {
+            "mean": 0.4960884825611379,
+            "std": 0.025142180184532705
+          },
+          "brier_score": {
+            "mean": 0.41293302011263994,
+            "std": 0.006680858319603769
+          },
+          "cohen_kappa": {
+            "mean": 0.593297723273621,
+            "std": 0.025330495341913513
+          },
+          "f1": {
+            "mean": 0.5098669468826517,
+            "std": 0.024929249443083844
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.3879503487264572,
+            "std": 0.0336255723373437
+          },
+          "precision": {
+            "mean": 0.5593432499117019,
+            "std": 0.02675917585912395
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7657252297999991,
+            "std": 0.03028273753894238
+          },
+          "recall": {
+            "mean": 0.4960884825611379,
+            "std": 0.025142180184532705
+          },
+          "roc_auc": {
+            "mean": 0.8720079389608786,
+            "std": 0.00586740583681687
+          }
+        },
+        "rank_key": [
+          0.5098669468826517,
+          0.4960884825611379,
+          0.7657252297999991
+        ]
+      },
+      {
+        "method": "random_forest",
+        "requested_count": "all_203",
+        "selected_feature_count": 203,
+        "selected_features": [
+          "ma_count",
+          "ma_area",
+          "ma_density",
+          "ma_mean_area",
+          "exudate_count",
+          "exudate_area",
+          "exudate_density",
+          "exudate_mean_area",
+          "vessel_density",
+          "vessel_skeleton_length",
+          "vessel_endpoint_count",
+          "vessel_branchpoint_count",
+          "vessel_tortuosity_mean",
+          "vessel_tortuosity_max",
+          "vessel_tortuosity_std",
+          "lab_b_mean",
+          "lab_b_std",
+          "lab_b_exudate_mean",
+          "lab_b_exudate_std",
+          "glcm_contrast",
+          "glcm_homogeneity",
+          "glcm_energy",
+          "glcm_contrast_0",
+          "glcm_contrast_45",
+          "glcm_contrast_90",
+          "glcm_contrast_135",
+          "glcm_energy_0",
+          "glcm_energy_45",
+          "glcm_energy_90",
+          "glcm_energy_135",
+          "vessel_area_ratio",
+          "vessel_length",
+          "vessel_branching_count",
+          "vessel_average_width",
+          "vessel_fragmentation_index",
+          "vessel_complexity_score",
+          "vessel_curvature_mean",
+          "vessel_curvature_std",
+          "vessel_curvature_max",
+          "hemorrhage_count",
+          "hemorrhage_area",
+          "hemorrhage_largest_area",
+          "hemorrhage_mean_area",
+          "hemorrhage_density",
+          "hemorrhage_retina_affected_pct",
+          "ma_max_area",
+          "ma_superior_count",
+          "ma_inferior_count",
+          "ma_nasal_count",
+          "ma_temporal_count",
+          "ma_distance_to_optic_disc_mean",
+          "ma_distance_to_optic_disc_min",
+          "ma_density_per_retinal_area",
+          "hard_exudate_count",
+          "hard_exudate_area",
+          "hard_exudate_mean_area",
+          "hard_exudate_max_area",
+          "hard_exudate_brightness_mean",
+          "hard_exudate_brightness_std",
+          "hard_exudate_texture_mean",
+          "hard_exudate_texture_std",
+          "hard_exudate_coverage_pct",
+          "hard_exudate_distance_to_macula_mean",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "soft_exudate_count",
+          "soft_exudate_area",
+          "soft_exudate_mean_area",
+          "soft_exudate_max_area",
+          "soft_exudate_brightness_mean",
+          "soft_exudate_brightness_std",
+          "soft_exudate_texture_mean",
+          "soft_exudate_texture_std",
+          "soft_exudate_coverage_pct",
+          "soft_exudate_distance_to_macula_mean",
+          "soft_exudate_distance_to_optic_disc_mean",
+          "cotton_wool_count",
+          "cotton_wool_area",
+          "cotton_wool_mean_area",
+          "cotton_wool_circularity_mean",
+          "cotton_wool_solidity_mean",
+          "cotton_wool_aspect_ratio_mean",
+          "cotton_wool_distribution_entropy",
+          "glcm_correlation",
+          "glcm_dissimilarity",
+          "glcm_entropy",
+          "lbp_uniform_ratio",
+          "lbp_entropy",
+          "lbp_mean",
+          "lbp_std",
+          "local_texture_variance_mean",
+          "local_texture_variance_std",
+          "texture_mean",
+          "texture_variance",
+          "texture_std",
+          "texture_skewness",
+          "texture_kurtosis",
+          "rgb_r_mean",
+          "rgb_r_std",
+          "rgb_r_min",
+          "rgb_r_max",
+          "rgb_r_entropy",
+          "rgb_g_mean",
+          "rgb_g_std",
+          "rgb_g_min",
+          "rgb_g_max",
+          "rgb_g_entropy",
+          "rgb_b_mean",
+          "rgb_b_std",
+          "rgb_b_min",
+          "rgb_b_max",
+          "rgb_b_entropy",
+          "hsv_h_mean",
+          "hsv_h_std",
+          "hsv_h_min",
+          "hsv_h_max",
+          "hsv_h_entropy",
+          "hsv_s_mean",
+          "hsv_s_std",
+          "hsv_s_min",
+          "hsv_s_max",
+          "hsv_s_entropy",
+          "hsv_v_mean",
+          "hsv_v_std",
+          "hsv_v_min",
+          "hsv_v_max",
+          "hsv_v_entropy",
+          "lab_color_l_mean",
+          "lab_color_l_std",
+          "lab_color_l_min",
+          "lab_color_l_max",
+          "lab_color_l_entropy",
+          "lab_color_a_mean",
+          "lab_color_a_std",
+          "lab_color_a_min",
+          "lab_color_a_max",
+          "lab_color_a_entropy",
+          "lab_color_b_mean",
+          "lab_color_b_std",
+          "lab_color_b_min",
+          "lab_color_b_max",
+          "lab_color_b_entropy",
+          "fft_energy",
+          "fft_low_frequency_ratio",
+          "fft_mid_frequency_ratio",
+          "fft_high_frequency_ratio",
+          "fft_dominant_radius_mean",
+          "fft_dominant_radius_std",
+          "wavelet_approx_energy",
+          "wavelet_horizontal_energy",
+          "wavelet_vertical_energy",
+          "wavelet_diagonal_energy",
+          "wavelet_detail_energy",
+          "all_lesion_area",
+          "all_lesion_perimeter_mean",
+          "all_lesion_circularity_mean",
+          "all_lesion_solidity_mean",
+          "all_lesion_eccentricity_mean",
+          "all_lesion_compactness_mean",
+          "all_lesion_aspect_ratio_mean",
+          "all_lesion_convex_hull_area_mean",
+          "superior_lesion_count",
+          "superior_lesion_density",
+          "superior_vessel_density",
+          "superior_texture_mean",
+          "superior_texture_std",
+          "inferior_lesion_count",
+          "inferior_lesion_density",
+          "inferior_vessel_density",
+          "inferior_texture_mean",
+          "inferior_texture_std",
+          "nasal_lesion_count",
+          "nasal_lesion_density",
+          "nasal_vessel_density",
+          "nasal_texture_mean",
+          "nasal_texture_std",
+          "temporal_lesion_count",
+          "temporal_lesion_density",
+          "temporal_vessel_density",
+          "temporal_texture_mean",
+          "temporal_texture_std",
+          "total_lesion_count",
+          "combined_lesion_burden",
+          "lesion_density_score",
+          "hemorrhage_to_ma_ratio",
+          "vessel_abnormality_score",
+          "exudate_burden_score",
+          "advanced_dr_indicator_score",
+          "neovascularization_likelihood_score",
+          "quality_blur_score",
+          "quality_sharpness",
+          "quality_brightness",
+          "quality_contrast",
+          "quality_snr",
+          "ma_to_exudate_ratio",
+          "hemorrhage_to_exudate_ratio",
+          "lesion_vessel_interaction",
+          "texture_lesion_interaction",
+          "quality_adjusted_lesion_density",
+          "area_adjusted_ma_count",
+          "area_adjusted_exudate_count",
+          "area_adjusted_hemorrhage_count",
+          "referable_lesion_score",
+          "stage_progression_score"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7428930469782161,
+            "std": 0.014978891877110843
+          },
+          "balanced_accuracy": {
+            "mean": 0.4960884825611379,
+            "std": 0.025142180184532705
+          },
+          "brier_score": {
+            "mean": 0.41293302011263994,
+            "std": 0.006680858319603771
+          },
+          "cohen_kappa": {
+            "mean": 0.593297723273621,
+            "std": 0.025330495341913513
+          },
+          "f1": {
+            "mean": 0.5098669468826517,
+            "std": 0.024929249443083844
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.3879503487264572,
+            "std": 0.0336255723373437
+          },
+          "precision": {
+            "mean": 0.5593432499117019,
+            "std": 0.02675917585912395
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7657252297999991,
+            "std": 0.03028273753894238
+          },
+          "recall": {
+            "mean": 0.4960884825611379,
+            "std": 0.025142180184532705
+          },
+          "roc_auc": {
+            "mean": 0.8720079389608786,
+            "std": 0.005867405836816779
+          }
+        },
+        "rank_key": [
+          0.5098669468826517,
+          0.4960884825611379,
+          0.7657252297999991
+        ]
+      },
+      {
+        "method": "shap",
+        "requested_count": "all_203",
+        "selected_feature_count": 203,
+        "selected_features": [
+          "ma_count",
+          "ma_area",
+          "ma_density",
+          "ma_mean_area",
+          "exudate_count",
+          "exudate_area",
+          "exudate_density",
+          "exudate_mean_area",
+          "vessel_density",
+          "vessel_skeleton_length",
+          "vessel_endpoint_count",
+          "vessel_branchpoint_count",
+          "vessel_tortuosity_mean",
+          "vessel_tortuosity_max",
+          "vessel_tortuosity_std",
+          "lab_b_mean",
+          "lab_b_std",
+          "lab_b_exudate_mean",
+          "lab_b_exudate_std",
+          "glcm_contrast",
+          "glcm_homogeneity",
+          "glcm_energy",
+          "glcm_contrast_0",
+          "glcm_contrast_45",
+          "glcm_contrast_90",
+          "glcm_contrast_135",
+          "glcm_energy_0",
+          "glcm_energy_45",
+          "glcm_energy_90",
+          "glcm_energy_135",
+          "vessel_area_ratio",
+          "vessel_length",
+          "vessel_branching_count",
+          "vessel_average_width",
+          "vessel_fragmentation_index",
+          "vessel_complexity_score",
+          "vessel_curvature_mean",
+          "vessel_curvature_std",
+          "vessel_curvature_max",
+          "hemorrhage_count",
+          "hemorrhage_area",
+          "hemorrhage_largest_area",
+          "hemorrhage_mean_area",
+          "hemorrhage_density",
+          "hemorrhage_retina_affected_pct",
+          "ma_max_area",
+          "ma_superior_count",
+          "ma_inferior_count",
+          "ma_nasal_count",
+          "ma_temporal_count",
+          "ma_distance_to_optic_disc_mean",
+          "ma_distance_to_optic_disc_min",
+          "ma_density_per_retinal_area",
+          "hard_exudate_count",
+          "hard_exudate_area",
+          "hard_exudate_mean_area",
+          "hard_exudate_max_area",
+          "hard_exudate_brightness_mean",
+          "hard_exudate_brightness_std",
+          "hard_exudate_texture_mean",
+          "hard_exudate_texture_std",
+          "hard_exudate_coverage_pct",
+          "hard_exudate_distance_to_macula_mean",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "soft_exudate_count",
+          "soft_exudate_area",
+          "soft_exudate_mean_area",
+          "soft_exudate_max_area",
+          "soft_exudate_brightness_mean",
+          "soft_exudate_brightness_std",
+          "soft_exudate_texture_mean",
+          "soft_exudate_texture_std",
+          "soft_exudate_coverage_pct",
+          "soft_exudate_distance_to_macula_mean",
+          "soft_exudate_distance_to_optic_disc_mean",
+          "cotton_wool_count",
+          "cotton_wool_area",
+          "cotton_wool_mean_area",
+          "cotton_wool_circularity_mean",
+          "cotton_wool_solidity_mean",
+          "cotton_wool_aspect_ratio_mean",
+          "cotton_wool_distribution_entropy",
+          "glcm_correlation",
+          "glcm_dissimilarity",
+          "glcm_entropy",
+          "lbp_uniform_ratio",
+          "lbp_entropy",
+          "lbp_mean",
+          "lbp_std",
+          "local_texture_variance_mean",
+          "local_texture_variance_std",
+          "texture_mean",
+          "texture_variance",
+          "texture_std",
+          "texture_skewness",
+          "texture_kurtosis",
+          "rgb_r_mean",
+          "rgb_r_std",
+          "rgb_r_min",
+          "rgb_r_max",
+          "rgb_r_entropy",
+          "rgb_g_mean",
+          "rgb_g_std",
+          "rgb_g_min",
+          "rgb_g_max",
+          "rgb_g_entropy",
+          "rgb_b_mean",
+          "rgb_b_std",
+          "rgb_b_min",
+          "rgb_b_max",
+          "rgb_b_entropy",
+          "hsv_h_mean",
+          "hsv_h_std",
+          "hsv_h_min",
+          "hsv_h_max",
+          "hsv_h_entropy",
+          "hsv_s_mean",
+          "hsv_s_std",
+          "hsv_s_min",
+          "hsv_s_max",
+          "hsv_s_entropy",
+          "hsv_v_mean",
+          "hsv_v_std",
+          "hsv_v_min",
+          "hsv_v_max",
+          "hsv_v_entropy",
+          "lab_color_l_mean",
+          "lab_color_l_std",
+          "lab_color_l_min",
+          "lab_color_l_max",
+          "lab_color_l_entropy",
+          "lab_color_a_mean",
+          "lab_color_a_std",
+          "lab_color_a_min",
+          "lab_color_a_max",
+          "lab_color_a_entropy",
+          "lab_color_b_mean",
+          "lab_color_b_std",
+          "lab_color_b_min",
+          "lab_color_b_max",
+          "lab_color_b_entropy",
+          "fft_energy",
+          "fft_low_frequency_ratio",
+          "fft_mid_frequency_ratio",
+          "fft_high_frequency_ratio",
+          "fft_dominant_radius_mean",
+          "fft_dominant_radius_std",
+          "wavelet_approx_energy",
+          "wavelet_horizontal_energy",
+          "wavelet_vertical_energy",
+          "wavelet_diagonal_energy",
+          "wavelet_detail_energy",
+          "all_lesion_area",
+          "all_lesion_perimeter_mean",
+          "all_lesion_circularity_mean",
+          "all_lesion_solidity_mean",
+          "all_lesion_eccentricity_mean",
+          "all_lesion_compactness_mean",
+          "all_lesion_aspect_ratio_mean",
+          "all_lesion_convex_hull_area_mean",
+          "superior_lesion_count",
+          "superior_lesion_density",
+          "superior_vessel_density",
+          "superior_texture_mean",
+          "superior_texture_std",
+          "inferior_lesion_count",
+          "inferior_lesion_density",
+          "inferior_vessel_density",
+          "inferior_texture_mean",
+          "inferior_texture_std",
+          "nasal_lesion_count",
+          "nasal_lesion_density",
+          "nasal_vessel_density",
+          "nasal_texture_mean",
+          "nasal_texture_std",
+          "temporal_lesion_count",
+          "temporal_lesion_density",
+          "temporal_vessel_density",
+          "temporal_texture_mean",
+          "temporal_texture_std",
+          "total_lesion_count",
+          "combined_lesion_burden",
+          "lesion_density_score",
+          "hemorrhage_to_ma_ratio",
+          "vessel_abnormality_score",
+          "exudate_burden_score",
+          "advanced_dr_indicator_score",
+          "neovascularization_likelihood_score",
+          "quality_blur_score",
+          "quality_sharpness",
+          "quality_brightness",
+          "quality_contrast",
+          "quality_snr",
+          "ma_to_exudate_ratio",
+          "hemorrhage_to_exudate_ratio",
+          "lesion_vessel_interaction",
+          "texture_lesion_interaction",
+          "quality_adjusted_lesion_density",
+          "area_adjusted_ma_count",
+          "area_adjusted_exudate_count",
+          "area_adjusted_hemorrhage_count",
+          "referable_lesion_score",
+          "stage_progression_score"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7428930469782161,
+            "std": 0.014978891877110843
+          },
+          "balanced_accuracy": {
+            "mean": 0.4960884825611379,
+            "std": 0.025142180184532705
+          },
+          "brier_score": {
+            "mean": 0.41293302011263994,
+            "std": 0.006680858319603771
+          },
+          "cohen_kappa": {
+            "mean": 0.593297723273621,
+            "std": 0.025330495341913513
+          },
+          "f1": {
+            "mean": 0.5098669468826517,
+            "std": 0.024929249443083844
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.3879503487264572,
+            "std": 0.0336255723373437
+          },
+          "precision": {
+            "mean": 0.5593432499117019,
+            "std": 0.02675917585912395
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7657252297999991,
+            "std": 0.03028273753894238
+          },
+          "recall": {
+            "mean": 0.4960884825611379,
+            "std": 0.025142180184532705
+          },
+          "roc_auc": {
+            "mean": 0.8720079389608786,
+            "std": 0.005867405836816828
+          }
+        },
+        "rank_key": [
+          0.5098669468826517,
+          0.4960884825611379,
+          0.7657252297999991
+        ]
+      },
+      {
+        "method": "mutual_information",
+        "requested_count": 75,
+        "selected_feature_count": 75,
+        "selected_features": [
+          "area_adjusted_exudate_count",
+          "area_adjusted_ma_count",
+          "ma_density_per_retinal_area",
+          "area_adjusted_hemorrhage_count",
+          "hsv_v_min",
+          "lab_color_a_min",
+          "rgb_b_std",
+          "wavelet_vertical_energy",
+          "vessel_length",
+          "vessel_skeleton_length",
+          "lbp_uniform_ratio",
+          "lab_b_exudate_std",
+          "rgb_b_max",
+          "hsv_s_std",
+          "fft_low_frequency_ratio",
+          "wavelet_diagonal_energy",
+          "lab_color_b_min",
+          "lbp_entropy",
+          "glcm_contrast_90",
+          "quality_blur_score",
+          "all_lesion_circularity_mean",
+          "texture_skewness",
+          "hard_exudate_brightness_std",
+          "all_lesion_eccentricity_mean",
+          "fft_mid_frequency_ratio",
+          "temporal_lesion_density",
+          "lesion_density_score",
+          "fft_high_frequency_ratio",
+          "lab_color_l_std",
+          "hsv_s_entropy",
+          "vessel_endpoint_count",
+          "rgb_g_max",
+          "lab_color_b_max",
+          "hsv_v_std",
+          "exudate_area",
+          "lab_color_l_max",
+          "inferior_texture_mean",
+          "texture_mean",
+          "rgb_r_std",
+          "rgb_r_min",
+          "wavelet_detail_energy",
+          "hard_exudate_area",
+          "all_lesion_solidity_mean",
+          "temporal_texture_mean",
+          "exudate_count",
+          "temporal_lesion_count",
+          "quality_sharpness",
+          "advanced_dr_indicator_score",
+          "hard_exudate_brightness_mean",
+          "hemorrhage_to_exudate_ratio",
+          "hard_exudate_coverage_pct",
+          "exudate_density",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "texture_std",
+          "texture_variance",
+          "lab_color_l_min",
+          "stage_progression_score",
+          "superior_lesion_density",
+          "vessel_fragmentation_index",
+          "exudate_burden_score",
+          "rgb_g_std",
+          "quality_contrast",
+          "vessel_density",
+          "hsv_s_min",
+          "vessel_area_ratio",
+          "hsv_h_std",
+          "fft_dominant_radius_mean",
+          "hard_exudate_count",
+          "lab_color_a_max",
+          "glcm_contrast",
+          "fft_dominant_radius_std",
+          "rgb_g_mean",
+          "glcm_contrast_45",
+          "quality_brightness",
+          "all_lesion_area"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7299185792853412,
+            "std": 0.010187329413516586
+          },
+          "balanced_accuracy": {
+            "mean": 0.5036137032309371,
+            "std": 0.027189504075727736
+          },
+          "brier_score": {
+            "mean": 0.4128962528925861,
+            "std": 0.004051112779652168
+          },
+          "cohen_kappa": {
+            "mean": 0.5794377127918733,
+            "std": 0.018068114695777283
+          },
+          "f1": {
+            "mean": 0.5079650105201045,
+            "std": 0.02638970757589026
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.41459735152241367,
+            "std": 0.014526492520778471
+          },
+          "precision": {
+            "mean": 0.5278821016583496,
+            "std": 0.022549733089915362
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7553023412001105,
+            "std": 0.016951349841309728
+          },
+          "recall": {
+            "mean": 0.5036137032309371,
+            "std": 0.027189504075727736
+          },
+          "roc_auc": {
+            "mean": 0.8718855068570626,
+            "std": 0.007684772412245719
+          }
+        },
+        "rank_key": [
+          0.5079650105201045,
+          0.5036137032309371,
+          0.7553023412001105
+        ]
+      },
+      {
+        "method": "mutual_information",
+        "requested_count": 100,
+        "selected_feature_count": 100,
+        "selected_features": [
+          "area_adjusted_exudate_count",
+          "area_adjusted_ma_count",
+          "ma_density_per_retinal_area",
+          "area_adjusted_hemorrhage_count",
+          "hsv_v_min",
+          "lab_color_a_min",
+          "rgb_b_std",
+          "wavelet_vertical_energy",
+          "vessel_length",
+          "vessel_skeleton_length",
+          "lbp_uniform_ratio",
+          "lab_b_exudate_std",
+          "rgb_b_max",
+          "hsv_s_std",
+          "fft_low_frequency_ratio",
+          "wavelet_diagonal_energy",
+          "lab_color_b_min",
+          "lbp_entropy",
+          "glcm_contrast_90",
+          "quality_blur_score",
+          "all_lesion_circularity_mean",
+          "texture_skewness",
+          "hard_exudate_brightness_std",
+          "all_lesion_eccentricity_mean",
+          "fft_mid_frequency_ratio",
+          "temporal_lesion_density",
+          "lesion_density_score",
+          "fft_high_frequency_ratio",
+          "lab_color_l_std",
+          "hsv_s_entropy",
+          "vessel_endpoint_count",
+          "rgb_g_max",
+          "lab_color_b_max",
+          "hsv_v_std",
+          "exudate_area",
+          "lab_color_l_max",
+          "inferior_texture_mean",
+          "texture_mean",
+          "rgb_r_std",
+          "rgb_r_min",
+          "wavelet_detail_energy",
+          "hard_exudate_area",
+          "all_lesion_solidity_mean",
+          "temporal_texture_mean",
+          "exudate_count",
+          "temporal_lesion_count",
+          "quality_sharpness",
+          "advanced_dr_indicator_score",
+          "hard_exudate_brightness_mean",
+          "hemorrhage_to_exudate_ratio",
+          "hard_exudate_coverage_pct",
+          "exudate_density",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "texture_std",
+          "texture_variance",
+          "lab_color_l_min",
+          "stage_progression_score",
+          "superior_lesion_density",
+          "vessel_fragmentation_index",
+          "exudate_burden_score",
+          "rgb_g_std",
+          "quality_contrast",
+          "vessel_density",
+          "hsv_s_min",
+          "vessel_area_ratio",
+          "hsv_h_std",
+          "fft_dominant_radius_mean",
+          "hard_exudate_count",
+          "lab_color_a_max",
+          "glcm_contrast",
+          "fft_dominant_radius_std",
+          "rgb_g_mean",
+          "glcm_contrast_45",
+          "quality_brightness",
+          "all_lesion_area",
+          "hard_exudate_distance_to_macula_mean",
+          "vessel_curvature_mean",
+          "rgb_b_entropy",
+          "quality_snr",
+          "combined_lesion_burden",
+          "lbp_mean",
+          "local_texture_variance_mean",
+          "all_lesion_compactness_mean",
+          "glcm_dissimilarity",
+          "ma_to_exudate_ratio",
+          "superior_lesion_count",
+          "inferior_texture_std",
+          "glcm_correlation",
+          "glcm_homogeneity",
+          "vessel_abnormality_score",
+          "lab_color_b_entropy",
+          "hsv_h_max",
+          "lesion_vessel_interaction",
+          "referable_lesion_score",
+          "lbp_std",
+          "lab_b_exudate_mean",
+          "hemorrhage_count",
+          "nasal_texture_std",
+          "inferior_vessel_density",
+          "hsv_h_mean"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7407896273082005,
+            "std": 0.015598343750361045
+          },
+          "balanced_accuracy": {
+            "mean": 0.49784576064261976,
+            "std": 0.032875383978048484
+          },
+          "brier_score": {
+            "mean": 0.407105865913817,
+            "std": 0.006522431039232149
+          },
+          "cohen_kappa": {
+            "mean": 0.5934142870810651,
+            "std": 0.02588108312508849
+          },
+          "f1": {
+            "mean": 0.5057619429026363,
+            "std": 0.03329634038730364
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.38899990782560606,
+            "std": 0.03179429111048172
+          },
+          "precision": {
+            "mean": 0.5407663346053133,
+            "std": 0.039046863635413646
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7698257226545876,
+            "std": 0.028255309539730142
+          },
+          "recall": {
+            "mean": 0.49784576064261976,
+            "std": 0.032875383978048484
+          },
+          "roc_auc": {
+            "mean": 0.8763848827668733,
+            "std": 0.007641119896155484
+          }
+        },
+        "rank_key": [
+          0.5057619429026363,
+          0.49784576064261976,
+          0.7698257226545876
+        ]
+      },
+      {
+        "method": "random_forest",
+        "requested_count": "all",
+        "selected_feature_count": 203,
+        "selected_features": [
+          "all_lesion_circularity_mean",
+          "all_lesion_eccentricity_mean",
+          "all_lesion_compactness_mean",
+          "all_lesion_solidity_mean",
+          "lesion_density_score",
+          "all_lesion_area",
+          "combined_lesion_burden",
+          "exudate_density",
+          "hard_exudate_coverage_pct",
+          "lesion_vessel_interaction",
+          "hard_exudate_brightness_mean",
+          "nasal_texture_mean",
+          "lbp_std",
+          "hsv_h_mean",
+          "area_adjusted_exudate_count",
+          "glcm_energy_45",
+          "temporal_lesion_density",
+          "texture_kurtosis",
+          "glcm_correlation",
+          "texture_skewness",
+          "all_lesion_perimeter_mean",
+          "quality_blur_score",
+          "lab_b_exudate_std",
+          "nasal_vessel_density",
+          "texture_mean",
+          "superior_texture_mean",
+          "hsv_h_std",
+          "total_lesion_count",
+          "quality_adjusted_lesion_density",
+          "exudate_area",
+          "lbp_entropy",
+          "vessel_curvature_mean",
+          "rgb_b_std",
+          "all_lesion_aspect_ratio_mean",
+          "exudate_burden_score",
+          "hard_exudate_area",
+          "vessel_area_ratio",
+          "hard_exudate_distance_to_optic_disc_mean",
+          "advanced_dr_indicator_score",
+          "vessel_density",
+          "wavelet_diagonal_energy",
+          "lbp_mean",
+          "quality_snr",
+          "ma_distance_to_optic_disc_min",
+          "fft_high_frequency_ratio",
+          "wavelet_vertical_energy",
+          "fft_low_frequency_ratio",
+          "hard_exudate_distance_to_macula_mean",
+          "stage_progression_score",
+          "vessel_skeleton_length",
+          "glcm_energy",
+          "hard_exudate_max_area",
+          "fft_dominant_radius_std",
+          "temporal_texture_mean",
+          "hard_exudate_brightness_std",
+          "glcm_energy_0",
+          "hard_exudate_count",
+          "vessel_curvature_std",
+          "lbp_uniform_ratio",
+          "exudate_mean_area",
+          "vessel_length",
+          "glcm_energy_90",
+          "local_texture_variance_std",
+          "superior_vessel_density",
+          "vessel_tortuosity_mean",
+          "hard_exudate_mean_area",
+          "vessel_tortuosity_max",
+          "glcm_energy_135",
+          "temporal_texture_std",
+          "all_lesion_convex_hull_area_mean",
+          "inferior_texture_mean",
+          "temporal_lesion_count",
+          "inferior_texture_std",
+          "fft_mid_frequency_ratio",
+          "lab_color_a_entropy",
+          "hsv_s_std",
+          "rgb_b_entropy",
+          "exudate_count",
+          "lab_color_a_std",
+          "hemorrhage_to_exudate_ratio",
+          "vessel_tortuosity_std",
+          "nasal_lesion_density",
+          "temporal_vessel_density",
+          "rgb_b_mean",
+          "ma_distance_to_optic_disc_mean",
+          "glcm_contrast_90",
+          "hsv_h_entropy",
+          "rgb_b_max",
+          "glcm_homogeneity",
+          "vessel_abnormality_score",
+          "texture_lesion_interaction",
+          "hsv_s_entropy",
+          "hard_exudate_texture_mean",
+          "vessel_fragmentation_index",
+          "ma_to_exudate_ratio",
+          "nasal_lesion_count",
+          "lab_color_b_entropy",
+          "hsv_s_mean",
+          "quality_brightness",
+          "fft_dominant_radius_mean",
+          "glcm_entropy",
+          "lab_color_a_mean",
+          "superior_lesion_density",
+          "lab_color_l_max",
+          "rgb_g_mean",
+          "glcm_contrast_0",
+          "lab_color_a_max",
+          "superior_lesion_count",
+          "lab_b_exudate_mean",
+          "lab_color_l_mean",
+          "hemorrhage_mean_area",
+          "inferior_lesion_density",
+          "inferior_vessel_density",
+          "vessel_complexity_score",
+          "area_adjusted_hemorrhage_count",
+          "rgb_r_mean",
+          "lab_color_a_min",
+          "hemorrhage_largest_area",
+          "hard_exudate_texture_std",
+          "vessel_average_width",
+          "lab_color_b_std",
+          "vessel_endpoint_count",
+          "hemorrhage_density",
+          "hemorrhage_area",
+          "rgb_r_std",
+          "lab_color_b_min",
+          "hemorrhage_retina_affected_pct",
+          "ma_nasal_count",
+          "superior_texture_std",
+          "ma_area",
+          "lab_b_std",
+          "neovascularization_likelihood_score",
+          "inferior_lesion_count",
+          "nasal_texture_std",
+          "quality_sharpness",
+          "lab_color_b_max",
+          "ma_mean_area",
+          "texture_variance",
+          "hsv_v_std",
+          "rgb_g_max",
+          "lab_b_mean",
+          "hsv_v_mean",
+          "glcm_contrast_135",
+          "vessel_branchpoint_count",
+          "glcm_dissimilarity",
+          "lab_color_b_mean",
+          "area_adjusted_ma_count",
+          "ma_max_area",
+          "hsv_v_entropy",
+          "fft_energy",
+          "rgb_g_entropy",
+          "glcm_contrast",
+          "wavelet_horizontal_energy",
+          "local_texture_variance_mean",
+          "wavelet_approx_energy",
+          "ma_density",
+          "rgb_r_entropy",
+          "hsv_v_min",
+          "ma_density_per_retinal_area",
+          "wavelet_detail_energy",
+          "lab_color_l_std",
+          "texture_std",
+          "lab_color_l_entropy",
+          "ma_superior_count",
+          "rgb_g_std",
+          "quality_contrast",
+          "vessel_branching_count",
+          "referable_lesion_score",
+          "hemorrhage_to_ma_ratio",
+          "hemorrhage_count",
+          "glcm_contrast_45",
+          "ma_temporal_count",
+          "ma_inferior_count",
+          "ma_count",
+          "hsv_h_max",
+          "rgb_r_min",
+          "rgb_r_max",
+          "hsv_s_min",
+          "hsv_v_max",
+          "lab_color_l_min",
+          "rgb_g_min",
+          "hsv_s_max",
+          "vessel_curvature_max",
+          "cotton_wool_area",
+          "cotton_wool_aspect_ratio_mean",
+          "rgb_b_min",
+          "cotton_wool_mean_area",
+          "cotton_wool_circularity_mean",
+          "cotton_wool_solidity_mean",
+          "soft_exudate_brightness_mean",
+          "cotton_wool_count",
+          "cotton_wool_distribution_entropy",
+          "soft_exudate_distance_to_macula_mean",
+          "soft_exudate_distance_to_optic_disc_mean",
+          "soft_exudate_max_area",
+          "soft_exudate_texture_std",
+          "soft_exudate_mean_area",
+          "soft_exudate_texture_mean",
+          "soft_exudate_area",
+          "soft_exudate_count",
+          "soft_exudate_coverage_pct",
+          "soft_exudate_brightness_std",
+          "hsv_h_min"
+        ],
+        "metrics": {
+          "accuracy": {
+            "mean": 0.7432414661873599,
+            "std": 0.019125213092410866
+          },
+          "balanced_accuracy": {
+            "mean": 0.490841465189217,
+            "std": 0.03098453649472593
+          },
+          "brier_score": {
+            "mean": 0.4129286423850977,
+            "std": 0.007812111637891167
+          },
+          "cohen_kappa": {
+            "mean": 0.5937940216322237,
+            "std": 0.03217760907544378
+          },
+          "f1": {
+            "mean": 0.5030221789681433,
+            "std": 0.033323422925282134
+          },
+          "mean_absolute_stage_error": {
+            "mean": 0.3868989461394291,
+            "std": 0.038227496033942356
+          },
+          "precision": {
+            "mean": 0.5498959980729757,
+            "std": 0.04121691790607373
+          },
+          "quadratic_weighted_kappa": {
+            "mean": 0.7697643012561868,
+            "std": 0.02962666117642704
+          },
+          "recall": {
+            "mean": 0.490841465189217,
+            "std": 0.03098453649472593
+          },
+          "roc_auc": {
+            "mean": 0.8742042660562458,
+            "std": 0.008806956651003083
+          }
+        },
+        "rank_key": [
+          0.5030221789681433,
+          0.490841465189217,
+          0.7697643012561868
+        ]
+      }
+    ]
+  },
+  "calibration_report": {
+    "selection_basis": "highest ROC-AUC, then lowest Brier score, using training CV",
+    "top_calibration": {
+      "base_model": "XGBoost",
+      "method": "sigmoid",
+      "status": "completed",
+      "roc_auc_mean": 0.9005047751987016,
+      "brier_score_mean": 0.41017791634646494,
+      "f1_mean": 0.563553361810772,
+      "recall_mean": 0.5938260649991445
     },
-    "4": {
-      "stage_name": "Proliferative DR",
-      "sensitivity_tpr": 0.3050847457627119,
-      "specificity_tnr": 0.9658753709198813
+    "calibration_candidates": [
+      {
+        "base_model": "XGBoost",
+        "method": "sigmoid",
+        "status": "completed",
+        "roc_auc_mean": 0.9005047751987016,
+        "brier_score_mean": 0.41017791634646494,
+        "f1_mean": 0.563553361810772,
+        "recall_mean": 0.5938260649991445
+      },
+      {
+        "base_model": "XGBoost",
+        "method": "isotonic",
+        "status": "completed",
+        "roc_auc_mean": 0.8964679773568461,
+        "brier_score_mean": 0.386749009364668,
+        "f1_mean": 0.5422674874461588,
+        "recall_mean": 0.5847225400328927
+      },
+      {
+        "base_model": "LightGBM",
+        "method": "sigmoid",
+        "status": "completed",
+        "roc_auc_mean": 0.8993610638696354,
+        "brier_score_mean": 0.43334160987024506,
+        "f1_mean": 0.5677719770602521,
+        "recall_mean": 0.5773766677705333
+      },
+      {
+        "base_model": "LightGBM",
+        "method": "isotonic",
+        "status": "completed",
+        "roc_auc_mean": 0.8981584517720516,
+        "brier_score_mean": 0.3808128325587511,
+        "f1_mean": 0.5395815448306458,
+        "recall_mean": 0.5719634672935066
+      },
+      {
+        "base_model": "CatBoost",
+        "method": "sigmoid",
+        "status": "completed",
+        "roc_auc_mean": 0.8951687751336829,
+        "brier_score_mean": 0.4172953927582796,
+        "f1_mean": 0.5428053051661192,
+        "recall_mean": 0.5773878255828717
+      },
+      {
+        "base_model": "CatBoost",
+        "method": "isotonic",
+        "status": "completed",
+        "roc_auc_mean": 0.8942606910749422,
+        "brier_score_mean": 0.3975220146267602,
+        "f1_mean": 0.5339223081738975,
+        "recall_mean": 0.5828895177853013
+      }
+    ]
+  },
+  "cross_validation": {
+    "XGBoost": {
+      "accuracy": {
+        "mean": 0.7548191845638615,
+        "std": 0.014627124988797426
+      },
+      "balanced_accuracy": {
+        "mean": 0.591450661944058,
+        "std": 0.026021834933938108
+      },
+      "brier_score": {
+        "mean": 0.347578641960767,
+        "std": 0.012216309757678071
+      },
+      "cohen_kappa": {
+        "mean": 0.6262800820388419,
+        "std": 0.022211822403791326
+      },
+      "f1": {
+        "mean": 0.5865427344409421,
+        "std": 0.022251730955693393
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.3690029803054045,
+        "std": 0.03155761160277035
+      },
+      "precision": {
+        "mean": 0.5864998587619634,
+        "std": 0.021045592980166533
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7982713051895761,
+        "std": 0.022901677725083256
+      },
+      "recall": {
+        "mean": 0.591450661944058,
+        "std": 0.026021834933938108
+      },
+      "roc_auc": {
+        "mean": 0.8995921526490822,
+        "std": 0.00774814677405829
+      }
+    },
+    "LightGBM": {
+      "accuracy": {
+        "mean": 0.76148216425477,
+        "std": 0.010860963871792775
+      },
+      "balanced_accuracy": {
+        "mean": 0.5684730082581317,
+        "std": 0.02707375222661592
+      },
+      "brier_score": {
+        "mean": 0.381170743423349,
+        "std": 0.014311699181415604
+      },
+      "cohen_kappa": {
+        "mean": 0.6337462189067276,
+        "std": 0.01828557867789883
+      },
+      "f1": {
+        "mean": 0.5735652521811655,
+        "std": 0.02579914078719839
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.35883553015638925,
+        "std": 0.025200803664528013
+      },
+      "precision": {
+        "mean": 0.5819204094633663,
+        "std": 0.024648253979022317
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.8025460708229856,
+        "std": 0.020714734868674232
+      },
+      "recall": {
+        "mean": 0.5684730082581317,
+        "std": 0.02707375222661592
+      },
+      "roc_auc": {
+        "mean": 0.8937711235465773,
+        "std": 0.0036026198278941
+      }
+    },
+    "CatBoost": {
+      "accuracy": {
+        "mean": 0.737632347067318,
+        "std": 0.01553548936803156
+      },
+      "balanced_accuracy": {
+        "mean": 0.5863459103200264,
+        "std": 0.0269921704973937
+      },
+      "brier_score": {
+        "mean": 0.37025992370048116,
+        "std": 0.011105153080158458
+      },
+      "cohen_kappa": {
+        "mean": 0.6047198966002579,
+        "std": 0.023048890241890368
+      },
+      "f1": {
+        "mean": 0.5694849810289209,
+        "std": 0.025264164528836425
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.3977663071865303,
+        "std": 0.032119521826637805
+      },
+      "precision": {
+        "mean": 0.5623104649322862,
+        "std": 0.025609608859649798
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7868803039476077,
+        "std": 0.01989169200924291
+      },
+      "recall": {
+        "mean": 0.5863459103200264,
+        "std": 0.0269921704973937
+      },
+      "roc_auc": {
+        "mean": 0.8973194194442009,
+        "std": 0.0068843097466746005
+      }
+    },
+    "LightGBM Calibrated Sigmoid": {
+      "accuracy": {
+        "mean": 0.7467502381171844,
+        "std": 0.013343642927878591
+      },
+      "balanced_accuracy": {
+        "mean": 0.5773766677705333,
+        "std": 0.035890271291930835
+      },
+      "brier_score": {
+        "mean": 0.43334160987024506,
+        "std": 0.00543612305247672
+      },
+      "cohen_kappa": {
+        "mean": 0.6154023349269442,
+        "std": 0.022432059991458583
+      },
+      "f1": {
+        "mean": 0.5677719770602521,
+        "std": 0.031147565695183003
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.37777429563400616,
+        "std": 0.030250952528106084
+      },
+      "precision": {
+        "mean": 0.5640931761210066,
+        "std": 0.0293147643841071
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.79451263195908,
+        "std": 0.022668217730229475
+      },
+      "recall": {
+        "mean": 0.5773766677705333,
+        "std": 0.035890271291930835
+      },
+      "roc_auc": {
+        "mean": 0.8993610638696354,
+        "std": 0.00709391385463194
+      }
+    },
+    "HistGradientBoosting": {
+      "accuracy": {
+        "mean": 0.7604270746919839,
+        "std": 0.01797214479119397
+      },
+      "balanced_accuracy": {
+        "mean": 0.5610955763822603,
+        "std": 0.02036037777631148
+      },
+      "brier_score": {
+        "mean": 0.37812119504193936,
+        "std": 0.019427201021473134
+      },
+      "cohen_kappa": {
+        "mean": 0.6312355493537739,
+        "std": 0.027049323308732987
+      },
+      "f1": {
+        "mean": 0.5677092531272354,
+        "std": 0.021434297552518834
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.3577859710572403,
+        "std": 0.040592836160532456
+      },
+      "precision": {
+        "mean": 0.5808377586934251,
+        "std": 0.024185996995231614
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.8036987520876652,
+        "std": 0.027955041685896884
+      },
+      "recall": {
+        "mean": 0.5610955763822603,
+        "std": 0.02036037777631148
+      },
+      "roc_auc": {
+        "mean": 0.8920860936032475,
+        "std": 0.004692073377945205
+      }
+    },
+    "XGBoost Calibrated Sigmoid": {
+      "accuracy": {
+        "mean": 0.7267582265646603,
+        "std": 0.01542270585267955
+      },
+      "balanced_accuracy": {
+        "mean": 0.5938260649991445,
+        "std": 0.028363782699549055
+      },
+      "brier_score": {
+        "mean": 0.41017791634646494,
+        "std": 0.009539842827385738
+      },
+      "cohen_kappa": {
+        "mean": 0.5928945141655523,
+        "std": 0.022671654231776306
+      },
+      "f1": {
+        "mean": 0.563553361810772,
+        "std": 0.024481011917269688
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.41285402648477587,
+        "std": 0.03358751905966235
+      },
+      "precision": {
+        "mean": 0.5558846468910131,
+        "std": 0.025031504522027685
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.779667267816895,
+        "std": 0.022748855381941775
+      },
+      "recall": {
+        "mean": 0.5938260649991445,
+        "std": 0.028363782699549055
+      },
+      "roc_auc": {
+        "mean": 0.9005047751987016,
+        "std": 0.006577825290748225
+      }
+    },
+    "Extra Trees": {
+      "accuracy": {
+        "mean": 0.7457000645220757,
+        "std": 0.010714686778771187
+      },
+      "balanced_accuracy": {
+        "mean": 0.5559054962119989,
+        "std": 0.022322333414514055
+      },
+      "brier_score": {
+        "mean": 0.392885934816151,
+        "std": 0.0075630155167203715
+      },
+      "cohen_kappa": {
+        "mean": 0.6061156616119617,
+        "std": 0.017544354762355396
+      },
+      "f1": {
+        "mean": 0.5596826847729515,
+        "std": 0.018859969096446702
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.37988140227978,
+        "std": 0.031649484208640125
+      },
+      "precision": {
+        "mean": 0.5765863743738573,
+        "std": 0.021074902044217875
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7872577209892307,
+        "std": 0.02954090545584416
+      },
+      "recall": {
+        "mean": 0.5559054962119989,
+        "std": 0.022322333414514055
+      },
+      "roc_auc": {
+        "mean": 0.8758659402352494,
+        "std": 0.006035509468481905
+      }
+    },
+    "Random Forest": {
+      "accuracy": {
+        "mean": 0.7379826097643407,
+        "std": 0.01295054825897248
+      },
+      "balanced_accuracy": {
+        "mean": 0.5622251107817202,
+        "std": 0.018337792313690825
+      },
+      "brier_score": {
+        "mean": 0.3966355090893419,
+        "std": 0.008754940112470785
+      },
+      "cohen_kappa": {
+        "mean": 0.5993216341660819,
+        "std": 0.020582424946094413
+      },
+      "f1": {
+        "mean": 0.5579883058589086,
+        "std": 0.015535735688265592
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.39706639628844437,
+        "std": 0.027761721521642864
+      },
+      "precision": {
+        "mean": 0.5612371700777187,
+        "std": 0.015609252958034416
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7781323358122344,
+        "std": 0.020416102200537585
+      },
+      "recall": {
+        "mean": 0.5622251107817202,
+        "std": 0.018337792313690825
+      },
+      "roc_auc": {
+        "mean": 0.8833187092755846,
+        "std": 0.0071811966110178985
+      }
+    },
+    "Stacking Ensemble": {
+      "accuracy": {
+        "mean": 0.7172894583218115,
+        "std": 0.010443242750758985
+      },
+      "balanced_accuracy": {
+        "mean": 0.5911683712132103,
+        "std": 0.02212291047560418
+      },
+      "brier_score": {
+        "mean": 0.38038219266632856,
+        "std": 0.00862906125954974
+      },
+      "cohen_kappa": {
+        "mean": 0.5825108512900916,
+        "std": 0.015621585261426789
+      },
+      "f1": {
+        "mean": 0.5477697035610973,
+        "std": 0.014777594912306874
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.398822011245276,
+        "std": 0.04020585879967872
+      },
+      "precision": {
+        "mean": 0.5467167998516929,
+        "std": 0.01986383678105014
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.8081615146805753,
+        "std": 0.029035609447952988
+      },
+      "recall": {
+        "mean": 0.5911683712132103,
+        "std": 0.02212291047560418
+      },
+      "roc_auc": {
+        "mean": 0.9022623234436662,
+        "std": 0.005604632307356964
+      }
+    },
+    "Soft Voting Ensemble": {
+      "accuracy": {
+        "mean": 0.7656883890988417,
+        "std": 0.017163885679501778
+      },
+      "balanced_accuracy": {
+        "mean": 0.5302298115603337,
+        "std": 0.037370789355432026
+      },
+      "brier_score": {
+        "mean": 0.329002860911616,
+        "std": 0.011252476499450497
+      },
+      "cohen_kappa": {
+        "mean": 0.6312144227158977,
+        "std": 0.02911138933057863
+      },
+      "f1": {
+        "mean": 0.5459769798397451,
+        "std": 0.038565591536911706
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.344808430884567,
+        "std": 0.03534648209820704
+      },
+      "precision": {
+        "mean": 0.5988458132152316,
+        "std": 0.038963173231494154
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7995796948561846,
+        "std": 0.026516726824561035
+      },
+      "recall": {
+        "mean": 0.5302298115603337,
+        "std": 0.037370789355432026
+      },
+      "roc_auc": {
+        "mean": 0.9056671068703539,
+        "std": 0.006846421512994296
+      }
+    },
+    "CatBoost Calibrated Sigmoid": {
+      "accuracy": {
+        "mean": 0.7095707745721571,
+        "std": 0.013802172807741214
+      },
+      "balanced_accuracy": {
+        "mean": 0.5773878255828717,
+        "std": 0.0342608813095927
+      },
+      "brier_score": {
+        "mean": 0.4172953927582796,
+        "std": 0.010123746170269728
+      },
+      "cohen_kappa": {
+        "mean": 0.5696704489102971,
+        "std": 0.02166017330445183
+      },
+      "f1": {
+        "mean": 0.5428053051661192,
+        "std": 0.02581512419164256
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.43529787691645927,
+        "std": 0.026977973113886437
+      },
+      "precision": {
+        "mean": 0.5368685324923275,
+        "std": 0.024290305359903244
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7717105542138976,
+        "std": 0.014678165244785988
+      },
+      "recall": {
+        "mean": 0.5773878255828717,
+        "std": 0.0342608813095927
+      },
+      "roc_auc": {
+        "mean": 0.8951687751336829,
+        "std": 0.006833156518104074
+      }
+    },
+    "XGBoost Calibrated Isotonic": {
+      "accuracy": {
+        "mean": 0.7116772667219713,
+        "std": 0.01326224501576192
+      },
+      "balanced_accuracy": {
+        "mean": 0.5847225400328927,
+        "std": 0.0131267227898445
+      },
+      "brier_score": {
+        "mean": 0.386749009364668,
+        "std": 0.01010653491866942
+      },
+      "cohen_kappa": {
+        "mean": 0.5730083288259495,
+        "std": 0.017823898993664187
+      },
+      "f1": {
+        "mean": 0.5422674874461588,
+        "std": 0.012552075888745523
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.421618582357821,
+        "std": 0.028573739771036236
+      },
+      "precision": {
+        "mean": 0.5427171513054497,
+        "std": 0.014385411577641912
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7808488782202797,
+        "std": 0.020906125724804162
+      },
+      "recall": {
+        "mean": 0.5847225400328927,
+        "std": 0.0131267227898445
+      },
+      "roc_auc": {
+        "mean": 0.8964679773568461,
+        "std": 0.007312661043590459
+      }
+    },
+    "LightGBM Calibrated Isotonic": {
+      "accuracy": {
+        "mean": 0.7176409500107537,
+        "std": 0.0034842563582347707
+      },
+      "balanced_accuracy": {
+        "mean": 0.5719634672935066,
+        "std": 0.027764934491047177
+      },
+      "brier_score": {
+        "mean": 0.3808128325587511,
+        "std": 0.005970239620120702
+      },
+      "cohen_kappa": {
+        "mean": 0.5796808568673978,
+        "std": 0.00872175327661613
+      },
+      "f1": {
+        "mean": 0.5395815448306458,
+        "std": 0.017773694684692105
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.4068866562202354,
+        "std": 0.024058593350713316
+      },
+      "precision": {
+        "mean": 0.5403206859265177,
+        "std": 0.019364315023016332
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7890633187978985,
+        "std": 0.021441913546252682
+      },
+      "recall": {
+        "mean": 0.5719634672935066,
+        "std": 0.027764934491047177
+      },
+      "roc_auc": {
+        "mean": 0.8981584517720516,
+        "std": 0.00652819474936792
+      }
+    },
+    "Logistic Regression": {
+      "accuracy": {
+        "mean": 0.69869542507758,
+        "std": 0.01783881819662879
+      },
+      "balanced_accuracy": {
+        "mean": 0.5770075151595033,
+        "std": 0.020122976822921353
+      },
+      "brier_score": {
+        "mean": 0.39855066082060203,
+        "std": 0.01613756860023109
+      },
+      "cohen_kappa": {
+        "mean": 0.5576781116548035,
+        "std": 0.0239045409254169
+      },
+      "f1": {
+        "mean": 0.5342502192836573,
+        "std": 0.019600787897646375
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.445834024641288,
+        "std": 0.04118623464718406
+      },
+      "precision": {
+        "mean": 0.5317740791690649,
+        "std": 0.019906591009244218
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.773438206387904,
+        "std": 0.029686277544121207
+      },
+      "recall": {
+        "mean": 0.5770075151595033,
+        "std": 0.020122976822921353
+      },
+      "roc_auc": {
+        "mean": 0.8948894383721763,
+        "std": 0.008902723151400971
+      }
+    },
+    "CatBoost Calibrated Isotonic": {
+      "accuracy": {
+        "mean": 0.7015055151012382,
+        "std": 0.008921864066531053
+      },
+      "balanced_accuracy": {
+        "mean": 0.5828895177853013,
+        "std": 0.031924468859334816
+      },
+      "brier_score": {
+        "mean": 0.3975220146267602,
+        "std": 0.011471623037684316
+      },
+      "cohen_kappa": {
+        "mean": 0.5599732529816499,
+        "std": 0.014266764265706047
+      },
+      "f1": {
+        "mean": 0.5339223081738975,
+        "std": 0.020443343824072
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.44055980581927673,
+        "std": 0.02836766578583174
+      },
+      "precision": {
+        "mean": 0.5361637611691457,
+        "std": 0.0226103313952273
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7736940532268415,
+        "std": 0.019991255117081986
+      },
+      "recall": {
+        "mean": 0.5828895177853013,
+        "std": 0.031924468859334816
+      },
+      "roc_auc": {
+        "mean": 0.8942606910749422,
+        "std": 0.007455007344238342
+      }
+    },
+    "Balanced Random Forest": {
+      "accuracy": {
+        "mean": 0.6997566595999631,
+        "std": 0.015858443848558598
+      },
+      "balanced_accuracy": {
+        "mean": 0.5607530159075955,
+        "std": 0.018434500219921747
+      },
+      "brier_score": {
+        "mean": 0.4606729769594371,
+        "std": 0.005622148157790614
+      },
+      "cohen_kappa": {
+        "mean": 0.551354131330773,
+        "std": 0.02250779282818064
+      },
+      "f1": {
+        "mean": 0.5322830388914636,
+        "std": 0.015652783729057856
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.4584391802623897,
+        "std": 0.04136932007891511
+      },
+      "precision": {
+        "mean": 0.5257541974092799,
+        "std": 0.018160823406130514
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.754749154603453,
+        "std": 0.02943312031381526
+      },
+      "recall": {
+        "mean": 0.5607530159075955,
+        "std": 0.018434500219921747
+      },
+      "roc_auc": {
+        "mean": 0.8723532105226715,
+        "std": 0.009778906618787513
+      }
+    },
+    "SVM RBF": {
+      "accuracy": {
+        "mean": 0.7516563738593418,
+        "std": 0.018568726678318527
+      },
+      "balanced_accuracy": {
+        "mean": 0.4659123395320487,
+        "std": 0.028108135397415725
+      },
+      "brier_score": {
+        "mean": 0.33805556168916484,
+        "std": 0.01582126082447113
+      },
+      "cohen_kappa": {
+        "mean": 0.6048219332820693,
+        "std": 0.030336936559497537
+      },
+      "f1": {
+        "mean": 0.46587986174261536,
+        "std": 0.035675363987136534
+      },
+      "mean_absolute_stage_error": {
+        "mean": 0.36725535379604884,
+        "std": 0.025875295192603745
+      },
+      "precision": {
+        "mean": 0.542849802832188,
+        "std": 0.05828052013817568
+      },
+      "quadratic_weighted_kappa": {
+        "mean": 0.7734705511281531,
+        "std": 0.016816471721785967
+      },
+      "recall": {
+        "mean": 0.4659123395320487,
+        "std": 0.028108135397415725
+      },
+      "roc_auc": {
+        "mean": 0.8933792810554358,
+        "std": 0.008260341179026028
+      }
     }
   },
-  "roc_auc": {
-    "0": 0.9847049712566646,
-    "1": 0.8707091006028791,
-    "2": 0.9028705440900564,
-    "3": 0.8658464494199364,
-    "4": 0.8616154503847507
+  "model_ranking": [
+    {
+      "rank": 1,
+      "model": "XGBoost",
+      "candidate_type": "optimized_model",
+      "f1_mean": 0.5865427344409421,
+      "f1_std": 0.022251730955693393,
+      "recall_mean": 0.591450661944058,
+      "recall_std": 0.026021834933938108,
+      "precision_mean": 0.5864998587619634,
+      "accuracy_mean": 0.7548191845638615,
+      "roc_auc_mean": 0.8995921526490822,
+      "balanced_accuracy_mean": 0.591450661944058,
+      "cohen_kappa_mean": 0.6262800820388419,
+      "quadratic_weighted_kappa_mean": 0.7982713051895761,
+      "brier_score_mean": 0.347578641960767,
+      "best_params": "{\"colsample_bytree\": 0.8896140219352956, \"learning_rate\": 0.0234659871844148, \"max_depth\": 5, \"min_child_weight\": 7.262585331096916, \"n_estimators\": 280, \"reg_alpha\": 0.0016537913127711, \"reg_lambda\": 0.0001005228726686, \"subsample\": 0.7371306743213336}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 2,
+      "model": "LightGBM",
+      "candidate_type": "optimized_model",
+      "f1_mean": 0.5735652521811655,
+      "f1_std": 0.02579914078719839,
+      "recall_mean": 0.5684730082581317,
+      "recall_std": 0.02707375222661592,
+      "precision_mean": 0.5819204094633663,
+      "accuracy_mean": 0.76148216425477,
+      "roc_auc_mean": 0.8937711235465773,
+      "balanced_accuracy_mean": 0.5684730082581317,
+      "cohen_kappa_mean": 0.6337462189067276,
+      "quadratic_weighted_kappa_mean": 0.8025460708229856,
+      "brier_score_mean": 0.381170743423349,
+      "best_params": "{\"colsample_bytree\": 0.9983024050842252, \"learning_rate\": 0.118943875326998, \"max_depth\": 4, \"min_child_samples\": 26, \"n_estimators\": 280, \"num_leaves\": 18, \"reg_alpha\": 0.026346616202884, \"reg_lambda\": 0.0009881063425578, \"subsample\": 0.9393131393629214}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 3,
+      "model": "CatBoost",
+      "candidate_type": "optimized_model",
+      "f1_mean": 0.5694849810289209,
+      "f1_std": 0.025264164528836425,
+      "recall_mean": 0.5863459103200264,
+      "recall_std": 0.0269921704973937,
+      "precision_mean": 0.5623104649322862,
+      "accuracy_mean": 0.737632347067318,
+      "roc_auc_mean": 0.8973194194442009,
+      "balanced_accuracy_mean": 0.5863459103200264,
+      "cohen_kappa_mean": 0.6047198966002579,
+      "quadratic_weighted_kappa_mean": 0.7868803039476077,
+      "brier_score_mean": 0.37025992370048116,
+      "best_params": "{\"depth\": 5, \"iterations\": 200, \"l2_leaf_reg\": 5.131114404088076, \"learning_rate\": 0.1033393060185819}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 4,
+      "model": "LightGBM Calibrated Sigmoid",
+      "candidate_type": "calibrated_model",
+      "f1_mean": 0.5677719770602521,
+      "f1_std": 0.031147565695183003,
+      "recall_mean": 0.5773766677705333,
+      "recall_std": 0.035890271291930835,
+      "precision_mean": 0.5640931761210066,
+      "accuracy_mean": 0.7467502381171844,
+      "roc_auc_mean": 0.8993610638696354,
+      "balanced_accuracy_mean": 0.5773766677705333,
+      "cohen_kappa_mean": 0.6154023349269442,
+      "quadratic_weighted_kappa_mean": 0.79451263195908,
+      "brier_score_mean": 0.43334160987024506,
+      "best_params": "{\"colsample_bytree\": 0.9983024050842252, \"learning_rate\": 0.118943875326998, \"max_depth\": 4, \"min_child_samples\": 26, \"n_estimators\": 280, \"num_leaves\": 18, \"reg_alpha\": 0.026346616202884, \"reg_lambda\": 0.0009881063425578, \"subsample\": 0.9393131393629214}",
+      "calibration": "{\"base_model\": \"LightGBM\", \"method\": \"sigmoid\"}"
+    },
+    {
+      "rank": 5,
+      "model": "HistGradientBoosting",
+      "candidate_type": "optimized_model",
+      "f1_mean": 0.5677092531272354,
+      "f1_std": 0.021434297552518834,
+      "recall_mean": 0.5610955763822603,
+      "recall_std": 0.02036037777631148,
+      "precision_mean": 0.5808377586934251,
+      "accuracy_mean": 0.7604270746919839,
+      "roc_auc_mean": 0.8920860936032475,
+      "balanced_accuracy_mean": 0.5610955763822603,
+      "cohen_kappa_mean": 0.6312355493537739,
+      "quadratic_weighted_kappa_mean": 0.8036987520876652,
+      "brier_score_mean": 0.37812119504193936,
+      "best_params": "{\"l2_regularization\": 0.2854666387751133, \"learning_rate\": 0.0595318090712982, \"max_iter\": 280, \"max_leaf_nodes\": 19, \"min_samples_leaf\": 10}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 6,
+      "model": "XGBoost Calibrated Sigmoid",
+      "candidate_type": "calibrated_model",
+      "f1_mean": 0.563553361810772,
+      "f1_std": 0.024481011917269688,
+      "recall_mean": 0.5938260649991445,
+      "recall_std": 0.028363782699549055,
+      "precision_mean": 0.5558846468910131,
+      "accuracy_mean": 0.7267582265646603,
+      "roc_auc_mean": 0.9005047751987016,
+      "balanced_accuracy_mean": 0.5938260649991445,
+      "cohen_kappa_mean": 0.5928945141655523,
+      "quadratic_weighted_kappa_mean": 0.779667267816895,
+      "brier_score_mean": 0.41017791634646494,
+      "best_params": "{\"colsample_bytree\": 0.8896140219352956, \"learning_rate\": 0.0234659871844148, \"max_depth\": 5, \"min_child_weight\": 7.262585331096916, \"n_estimators\": 280, \"reg_alpha\": 0.0016537913127711, \"reg_lambda\": 0.0001005228726686, \"subsample\": 0.7371306743213336}",
+      "calibration": "{\"base_model\": \"XGBoost\", \"method\": \"sigmoid\"}"
+    },
+    {
+      "rank": 7,
+      "model": "Extra Trees",
+      "candidate_type": "optimized_model",
+      "f1_mean": 0.5596826847729515,
+      "f1_std": 0.018859969096446702,
+      "recall_mean": 0.5559054962119989,
+      "recall_std": 0.022322333414514055,
+      "precision_mean": 0.5765863743738573,
+      "accuracy_mean": 0.7457000645220757,
+      "roc_auc_mean": 0.8758659402352494,
+      "balanced_accuracy_mean": 0.5559054962119989,
+      "cohen_kappa_mean": 0.6061156616119617,
+      "quadratic_weighted_kappa_mean": 0.7872577209892307,
+      "brier_score_mean": 0.392885934816151,
+      "best_params": "{\"max_depth\": 14, \"max_features\": null, \"min_samples_leaf\": 1, \"min_samples_split\": 5, \"n_estimators\": 320}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 8,
+      "model": "Random Forest",
+      "candidate_type": "optimized_model",
+      "f1_mean": 0.5579883058589086,
+      "f1_std": 0.015535735688265592,
+      "recall_mean": 0.5622251107817202,
+      "recall_std": 0.018337792313690825,
+      "precision_mean": 0.5612371700777187,
+      "accuracy_mean": 0.7379826097643407,
+      "roc_auc_mean": 0.8833187092755846,
+      "balanced_accuracy_mean": 0.5622251107817202,
+      "cohen_kappa_mean": 0.5993216341660819,
+      "quadratic_weighted_kappa_mean": 0.7781323358122344,
+      "brier_score_mean": 0.3966355090893419,
+      "best_params": "{\"max_depth\": 14, \"max_features\": null, \"min_samples_leaf\": 3, \"min_samples_split\": 8, \"n_estimators\": 320}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 9,
+      "model": "Stacking Ensemble",
+      "candidate_type": "ensemble",
+      "f1_mean": 0.5477697035610973,
+      "f1_std": 0.014777594912306874,
+      "recall_mean": 0.5911683712132103,
+      "recall_std": 0.02212291047560418,
+      "precision_mean": 0.5467167998516929,
+      "accuracy_mean": 0.7172894583218115,
+      "roc_auc_mean": 0.9022623234436662,
+      "balanced_accuracy_mean": 0.5911683712132103,
+      "cohen_kappa_mean": 0.5825108512900916,
+      "quadratic_weighted_kappa_mean": 0.8081615146805753,
+      "brier_score_mean": 0.38038219266632856,
+      "best_params": "{}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 10,
+      "model": "Soft Voting Ensemble",
+      "candidate_type": "ensemble",
+      "f1_mean": 0.5459769798397451,
+      "f1_std": 0.038565591536911706,
+      "recall_mean": 0.5302298115603337,
+      "recall_std": 0.037370789355432026,
+      "precision_mean": 0.5988458132152316,
+      "accuracy_mean": 0.7656883890988417,
+      "roc_auc_mean": 0.9056671068703539,
+      "balanced_accuracy_mean": 0.5302298115603337,
+      "cohen_kappa_mean": 0.6312144227158977,
+      "quadratic_weighted_kappa_mean": 0.7995796948561846,
+      "brier_score_mean": 0.329002860911616,
+      "best_params": "{}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 11,
+      "model": "CatBoost Calibrated Sigmoid",
+      "candidate_type": "calibrated_model",
+      "f1_mean": 0.5428053051661192,
+      "f1_std": 0.02581512419164256,
+      "recall_mean": 0.5773878255828717,
+      "recall_std": 0.0342608813095927,
+      "precision_mean": 0.5368685324923275,
+      "accuracy_mean": 0.7095707745721571,
+      "roc_auc_mean": 0.8951687751336829,
+      "balanced_accuracy_mean": 0.5773878255828717,
+      "cohen_kappa_mean": 0.5696704489102971,
+      "quadratic_weighted_kappa_mean": 0.7717105542138976,
+      "brier_score_mean": 0.4172953927582796,
+      "best_params": "{\"depth\": 5, \"iterations\": 200, \"l2_leaf_reg\": 5.131114404088076, \"learning_rate\": 0.1033393060185819}",
+      "calibration": "{\"base_model\": \"CatBoost\", \"method\": \"sigmoid\"}"
+    },
+    {
+      "rank": 12,
+      "model": "XGBoost Calibrated Isotonic",
+      "candidate_type": "calibrated_model",
+      "f1_mean": 0.5422674874461588,
+      "f1_std": 0.012552075888745523,
+      "recall_mean": 0.5847225400328927,
+      "recall_std": 0.0131267227898445,
+      "precision_mean": 0.5427171513054497,
+      "accuracy_mean": 0.7116772667219713,
+      "roc_auc_mean": 0.8964679773568461,
+      "balanced_accuracy_mean": 0.5847225400328927,
+      "cohen_kappa_mean": 0.5730083288259495,
+      "quadratic_weighted_kappa_mean": 0.7808488782202797,
+      "brier_score_mean": 0.386749009364668,
+      "best_params": "{\"colsample_bytree\": 0.8896140219352956, \"learning_rate\": 0.0234659871844148, \"max_depth\": 5, \"min_child_weight\": 7.262585331096916, \"n_estimators\": 280, \"reg_alpha\": 0.0016537913127711, \"reg_lambda\": 0.0001005228726686, \"subsample\": 0.7371306743213336}",
+      "calibration": "{\"base_model\": \"XGBoost\", \"method\": \"isotonic\"}"
+    },
+    {
+      "rank": 13,
+      "model": "LightGBM Calibrated Isotonic",
+      "candidate_type": "calibrated_model",
+      "f1_mean": 0.5395815448306458,
+      "f1_std": 0.017773694684692105,
+      "recall_mean": 0.5719634672935066,
+      "recall_std": 0.027764934491047177,
+      "precision_mean": 0.5403206859265177,
+      "accuracy_mean": 0.7176409500107537,
+      "roc_auc_mean": 0.8981584517720516,
+      "balanced_accuracy_mean": 0.5719634672935066,
+      "cohen_kappa_mean": 0.5796808568673978,
+      "quadratic_weighted_kappa_mean": 0.7890633187978985,
+      "brier_score_mean": 0.3808128325587511,
+      "best_params": "{\"colsample_bytree\": 0.9983024050842252, \"learning_rate\": 0.118943875326998, \"max_depth\": 4, \"min_child_samples\": 26, \"n_estimators\": 280, \"num_leaves\": 18, \"reg_alpha\": 0.026346616202884, \"reg_lambda\": 0.0009881063425578, \"subsample\": 0.9393131393629214}",
+      "calibration": "{\"base_model\": \"LightGBM\", \"method\": \"isotonic\"}"
+    },
+    {
+      "rank": 14,
+      "model": "Logistic Regression",
+      "candidate_type": "optimized_model",
+      "f1_mean": 0.5342502192836573,
+      "f1_std": 0.019600787897646375,
+      "recall_mean": 0.5770075151595033,
+      "recall_std": 0.020122976822921353,
+      "precision_mean": 0.5317740791690649,
+      "accuracy_mean": 0.69869542507758,
+      "roc_auc_mean": 0.8948894383721763,
+      "balanced_accuracy_mean": 0.5770075151595033,
+      "cohen_kappa_mean": 0.5576781116548035,
+      "quadratic_weighted_kappa_mean": 0.773438206387904,
+      "brier_score_mean": 0.39855066082060203,
+      "best_params": "{\"C\": 0.5656778561987862}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 15,
+      "model": "CatBoost Calibrated Isotonic",
+      "candidate_type": "calibrated_model",
+      "f1_mean": 0.5339223081738975,
+      "f1_std": 0.020443343824072,
+      "recall_mean": 0.5828895177853013,
+      "recall_std": 0.031924468859334816,
+      "precision_mean": 0.5361637611691457,
+      "accuracy_mean": 0.7015055151012382,
+      "roc_auc_mean": 0.8942606910749422,
+      "balanced_accuracy_mean": 0.5828895177853013,
+      "cohen_kappa_mean": 0.5599732529816499,
+      "quadratic_weighted_kappa_mean": 0.7736940532268415,
+      "brier_score_mean": 0.3975220146267602,
+      "best_params": "{\"depth\": 5, \"iterations\": 200, \"l2_leaf_reg\": 5.131114404088076, \"learning_rate\": 0.1033393060185819}",
+      "calibration": "{\"base_model\": \"CatBoost\", \"method\": \"isotonic\"}"
+    },
+    {
+      "rank": 16,
+      "model": "Balanced Random Forest",
+      "candidate_type": "optimized_model",
+      "f1_mean": 0.5322830388914636,
+      "f1_std": 0.015652783729057856,
+      "recall_mean": 0.5607530159075955,
+      "recall_std": 0.018434500219921747,
+      "precision_mean": 0.5257541974092799,
+      "accuracy_mean": 0.6997566595999631,
+      "roc_auc_mean": 0.8723532105226715,
+      "balanced_accuracy_mean": 0.5607530159075955,
+      "cohen_kappa_mean": 0.551354131330773,
+      "quadratic_weighted_kappa_mean": 0.754749154603453,
+      "brier_score_mean": 0.4606729769594371,
+      "best_params": "{\"max_depth\": null, \"max_features\": \"log2\", \"min_samples_leaf\": 1, \"min_samples_split\": 2, \"n_estimators\": 320}",
+      "calibration": "{}"
+    },
+    {
+      "rank": 17,
+      "model": "SVM RBF",
+      "candidate_type": "optimized_model",
+      "f1_mean": 0.46587986174261536,
+      "f1_std": 0.035675363987136534,
+      "recall_mean": 0.4659123395320487,
+      "recall_std": 0.028108135397415725,
+      "precision_mean": 0.542849802832188,
+      "accuracy_mean": 0.7516563738593418,
+      "roc_auc_mean": 0.8933792810554358,
+      "balanced_accuracy_mean": 0.4659123395320487,
+      "cohen_kappa_mean": 0.6048219332820693,
+      "quadratic_weighted_kappa_mean": 0.7734705511281531,
+      "brier_score_mean": 0.33805556168916484,
+      "best_params": "{\"C\": 4.03833919439027, \"gamma\": 0.0295567773973307}",
+      "calibration": "{}"
+    }
+  ],
+  "holdout": {
+    "accuracy": 0.7741935483870968,
+    "precision": 0.6018224697559971,
+    "recall": 0.6086842105263158,
+    "f1": 0.6040909335740177,
+    "balanced_accuracy": 0.6086842105263158,
+    "cohen_kappa": 0.6560612416107382,
+    "quadratic_weighted_kappa": 0.8292862986093098,
+    "mean_absolute_stage_error": 0.3225806451612903,
+    "roc_auc": 0.9055392202192806,
+    "brier_score": 0.3383643683664208,
+    "confusion_matrix": [
+      [
+        345,
+        7,
+        3,
+        1,
+        4
+      ],
+      [
+        12,
+        41,
+        16,
+        1,
+        0
+      ],
+      [
+        9,
+        25,
+        126,
+        14,
+        15
+      ],
+      [
+        1,
+        3,
+        11,
+        14,
+        9
+      ],
+      [
+        1,
+        3,
+        13,
+        13,
+        26
+      ]
+    ],
+    "classification_report": {
+      "0": {
+        "precision": 0.9375,
+        "recall": 0.9583333333333334,
+        "f1-score": 0.9478021978021978,
+        "support": 360.0
+      },
+      "1": {
+        "precision": 0.5189873417721519,
+        "recall": 0.5857142857142857,
+        "f1-score": 0.5503355704697986,
+        "support": 70.0
+      },
+      "2": {
+        "precision": 0.7455621301775148,
+        "recall": 0.6666666666666666,
+        "f1-score": 0.7039106145251397,
+        "support": 189.0
+      },
+      "3": {
+        "precision": 0.32558139534883723,
+        "recall": 0.3684210526315789,
+        "f1-score": 0.345679012345679,
+        "support": 38.0
+      },
+      "4": {
+        "precision": 0.48148148148148145,
+        "recall": 0.4642857142857143,
+        "f1-score": 0.4727272727272727,
+        "support": 56.0
+      },
+      "accuracy": 0.7741935483870968,
+      "macro avg": {
+        "precision": 0.6018224697559971,
+        "recall": 0.6086842105263158,
+        "f1-score": 0.6040909335740177,
+        "support": 713.0
+      },
+      "weighted avg": {
+        "precision": 0.7771043653770261,
+        "recall": 0.7741935483870968,
+        "f1-score": 0.7747263913447288,
+        "support": 713.0
+      }
+    },
+    "confusion_summary": {
+      "most_common_confusions": [
+        {
+          "true_label": 2,
+          "predicted_label": 1,
+          "count": 25,
+          "stage_distance": 1
+        },
+        {
+          "true_label": 1,
+          "predicted_label": 2,
+          "count": 16,
+          "stage_distance": 1
+        },
+        {
+          "true_label": 2,
+          "predicted_label": 4,
+          "count": 15,
+          "stage_distance": 2
+        },
+        {
+          "true_label": 2,
+          "predicted_label": 3,
+          "count": 14,
+          "stage_distance": 1
+        },
+        {
+          "true_label": 4,
+          "predicted_label": 2,
+          "count": 13,
+          "stage_distance": 2
+        },
+        {
+          "true_label": 4,
+          "predicted_label": 3,
+          "count": 13,
+          "stage_distance": 1
+        },
+        {
+          "true_label": 1,
+          "predicted_label": 0,
+          "count": 12,
+          "stage_distance": 1
+        },
+        {
+          "true_label": 3,
+          "predicted_label": 2,
+          "count": 11,
+          "stage_distance": 1
+        },
+        {
+          "true_label": 2,
+          "predicted_label": 0,
+          "count": 9,
+          "stage_distance": 2
+        },
+        {
+          "true_label": 3,
+          "predicted_label": 4,
+          "count": 9,
+          "stage_distance": 1
+        }
+      ],
+      "severity_aware_note": "Quadratic weighted kappa and mean absolute stage error penalize larger DR-stage distances more strongly than adjacent-stage errors."
+    }
+  },
+  "optimal_threshold": {
+    "problem_type": "multiclass",
+    "threshold": null,
+    "message": "Threshold optimization is used only for binary classification."
+  },
+  "artifact_paths": {
+    "best_model": "results/best_model.pkl",
+    "imputer": "results/imputer.pkl",
+    "scaler": "results/scaler.pkl",
+    "explainer": "results/explainer.pkl",
+    "selected_features": "results/selected_features.json",
+    "feature_order": "results/feature_order.json",
+    "metrics": "results/metrics.json",
+    "optimal_threshold": "results/optimal_threshold.json",
+    "class_distribution": "results/class_distribution.json",
+    "data_quality_report": "results/data_quality_report.json",
+    "feature_importance": "results/feature_importance.csv",
+    "misclassified_cases": "results/misclassified_cases.csv"
   }
 }

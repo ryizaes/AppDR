@@ -11,10 +11,9 @@ if celery_app is not None:
     def analyze_image_task(
         filename: str,
         image_base64: str,
-        calibration: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         image_bytes = base64.b64decode(image_base64.encode("ascii"))
-        output = analyze_image(image_bytes, calibration=calibration)
+        output = analyze_image(image_bytes)
         return build_analyze_response(filename, output).model_dump(mode="json")
 
 else:

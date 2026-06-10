@@ -1,16 +1,16 @@
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.pipeline import analyze_image, build_analyze_response, normalize_calibration
+from app.pipeline import analyze_image, build_analyze_response, get_supervised_model_status
 from app.schemas import AnalyzeResponse, AnalyzeTaskResponse, AnalyzeTaskStatusResponse
 from app.task_queue import get_task_status, submit_analysis
 
 app = FastAPI(
-    title="DR Screening Handcrafted Feature ML API",
+    title="DR Screening Classical Processing API",
     version="0.1.0",
     description=(
-        "Classical image processing plus supervised handcrafted-feature machine "
-        "learning for diabetic retinopathy screening support. No CNN or deep learning."
+        "Automated classical retinal image processing for diabetic retinopathy "
+        "screening support with required clinician review."
     ),
 )
 
@@ -29,8 +29,8 @@ def root() -> dict[str, object]:
         "name": "AppDR clinical decision-support API",
         "status": "ok",
         "scope": (
-            "Semi-automated retinal screening support using handcrafted classical "
-            "image-processing features and shallow tabular ML. This service does "
+            "Automated retinal screening support using handcrafted classical "
+            "image-processing features. This service does "
             "not provide an autonomous diagnosis."
         ),
         "clinical_review_required": True,
@@ -43,16 +43,16 @@ def root() -> dict[str, object]:
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "models": get_supervised_model_status(),
+    }
 
 
 @app.post("/analyze", response_model=AnalyzeTaskResponse)
 async def analyze(
     file: UploadFile = File(...),
-    clahe_clip_limit: float = Form(2.0),
-    exudate_percentile: float = Form(97.5),
-    exudate_local_percentile: float = Form(98.0),
 ) -> AnalyzeTaskResponse:
     if file.content_type is None or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Please upload an image file.")
@@ -62,14 +62,7 @@ async def analyze(
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    calibration = normalize_calibration(
-        {
-            "clahe_clip_limit": clahe_clip_limit,
-            "exudate_percentile": exudate_percentile,
-            "exudate_local_percentile": exudate_local_percentile,
-        },
-    )
-    task_id = submit_analysis(file.filename or "uploaded-image", image_bytes, calibration)
+    task_id = submit_analysis(file.filename or "uploaded-image", image_bytes)
 
     return AnalyzeTaskResponse(
         task_id=task_id,
@@ -91,9 +84,6 @@ def task_status(task_id: str) -> AnalyzeTaskStatusResponse:
 @app.post("/analyze-sync", response_model=AnalyzeResponse)
 async def analyze_sync(
     file: UploadFile = File(...),
-    clahe_clip_limit: float = Form(2.0),
-    exudate_percentile: float = Form(97.5),
-    exudate_local_percentile: float = Form(98.0),
 ) -> AnalyzeResponse:
     if file.content_type is None or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Please upload an image file.")
@@ -103,16 +93,8 @@ async def analyze_sync(
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    calibration = normalize_calibration(
-        {
-            "clahe_clip_limit": clahe_clip_limit,
-            "exudate_percentile": exudate_percentile,
-            "exudate_local_percentile": exudate_local_percentile,
-        },
-    )
-
     try:
-        output = analyze_image(image_bytes, calibration=calibration)
+        output = analyze_image(image_bytes)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:

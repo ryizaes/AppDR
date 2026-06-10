@@ -1,8 +1,10 @@
 import base64
+import hashlib
 import json
 import pickle
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +12,14 @@ import cv2
 import numpy as np
 
 import config as ml_config
-from app.schemas import AnalyzeResponse, FeatureReport, QualityReport, ScreeningResult
+from app.schemas import (
+    AnalysisHistoryEntry,
+    AnalyzeResponse,
+    DetectionFinding,
+    FeatureReport,
+    QualityReport,
+    ScreeningResult,
+)
 from feature_extraction import (
     FeatureExtractionPayload,
     extract_feature_payload,
@@ -24,8 +33,10 @@ class PipelineOutput:
     features: FeatureReport
     result: ScreeningResult
     processed_images: dict[str, str]
+    detected_findings: list[DetectionFinding]
     lesion_regions: dict[str, list[dict[str, Any]]]
     image_shape: dict[str, int]
+    image_id: str
 
 
 @dataclass
@@ -92,6 +103,16 @@ FEATURE_VECTOR_NAMES = [
 ]
 ML_MODEL_PATH = Path(__file__).resolve().parents[1] / "results" / "best_model.pkl"
 ML_METADATA_PATH = Path(__file__).resolve().parents[1] / "results" / "best_model_metadata.json"
+BINARY_SCREENING_MODEL_PATH = (
+    Path(__file__).resolve().parents[1] / "results" / "binary" / "best_model.pkl"
+)
+BINARY_SCREENING_METADATA_PATH = (
+    Path(__file__).resolve().parents[1] / "results" / "binary" / "best_model_metadata.json"
+)
+BINARY_REFERABLE_THRESHOLD_PATH = (
+    Path(__file__).resolve().parents[1] / "results" / "binary" / "optimal_threshold.json"
+)
+DEFAULT_BINARY_REFERABLE_THRESHOLD = 0.20
 ML_FEATURE_NAMES = ml_config.FEATURE_NAMES
 ML_STAGE_LABELS = {
     0: "Stage 0: No DR",
@@ -113,28 +134,42 @@ _SUPERVISED_MODEL: Any | None = None
 _SUPERVISED_MODEL_LOAD_ATTEMPTED = False
 _SUPERVISED_MODEL_FEATURE_NAMES: list[str] | None = None
 _SUPERVISED_MODEL_METADATA: dict[str, Any] = {}
+_BINARY_SCREENING_MODEL: Any | None = None
+_BINARY_SCREENING_MODEL_LOAD_ATTEMPTED = False
+_BINARY_SCREENING_MODEL_METADATA: dict[str, Any] = {}
+_BINARY_REFERABLE_THRESHOLD: float | None = None
 
 
-DEFAULT_CALIBRATION = {
+INTERNAL_PROCESSING_PARAMETERS = {
     "clahe_clip_limit": 2.0,
     "exudate_percentile": 97.5,
     "exudate_local_percentile": 98.0,
 }
+MIN_ANALYSIS_QUALITY_SCORE = 50
 
 
 def analyze_image(
     image_bytes: bytes,
     include_processed_images: bool = True,
-    calibration: dict[str, float] | None = None,
 ) -> PipelineOutput:
-    calibration_values = normalize_calibration(calibration)
+    processing_parameters = fixed_processing_parameters()
+    image_id = hashlib.sha256(image_bytes).hexdigest()[:16]
     image = prepare_analysis_image(decode_image(image_bytes))
     stage0 = stage0_fov_and_optic_disc_masking(image)
     quality = assess_quality(image, image[:, :, 1], stage0.fov_mask)
+    if not quality.is_acceptable:
+        return build_quality_blocked_output(
+            image=image,
+            stage0=stage0,
+            quality=quality,
+            image_id=image_id,
+            include_processed_images=include_processed_images,
+        )
+
     preprocessed = stage1_preprocess_green_channel(
         image,
         stage0.fov_mask,
-        clahe_clip_limit=calibration_values["clahe_clip_limit"],
+        clahe_clip_limit=processing_parameters["clahe_clip_limit"],
     )
     vessels = stage2_segment_vessels(preprocessed.denoised, stage0.fov_mask)
     lesions = stage3_extract_lesions(
@@ -143,11 +178,11 @@ def analyze_image(
         fov_mask=stage0.fov_mask,
         optic_disc_mask=stage0.optic_disc_mask,
         vessels=vessels.vessels,
-        calibration=calibration_values,
+        processing_parameters=processing_parameters,
     )
     # Use the same resized/cropped frame as the dashboard overlays so lesion
     # coordinates align with processed_images. Raw upload bytes can differ in size.
-    expanded_payload = extract_payload_from_image(image, calibration_values)
+    expanded_payload = extract_payload_from_image(image)
     features = stage4_extract_features(
         preprocessed=preprocessed.denoised,
         vessels=vessels.vessels,
@@ -160,6 +195,7 @@ def analyze_image(
     features.expanded_features = expanded_payload.features
     quality = add_feature_quality_warnings(quality, features)
     result = stage5_classify(features, quality)
+    detected_findings = build_detection_findings(features)
     processed_images: dict[str, str] = {}
 
     if include_processed_images:
@@ -189,6 +225,7 @@ def analyze_image(
         features=features,
         result=result,
         processed_images=processed_images,
+        detected_findings=detected_findings,
         lesion_regions=lesion_regions_from_masks(
             vessels=vessels.vessels,
             microaneurysms=lesions.microaneurysms,
@@ -198,6 +235,7 @@ def analyze_image(
             "height": int(image.shape[0]),
             "width": int(image.shape[1]),
         },
+        image_id=image_id,
     )
 
 
@@ -209,36 +247,84 @@ def process_image_path(image_path: str | Path) -> dict[str, Any]:
 
 
 def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResponse:
+    history_entry = AnalysisHistoryEntry(
+        image_id=output.image_id,
+        date_analyzed=datetime.now(timezone.utc).isoformat(),
+        dr_stage=output.result.stage,
+        confidence_level=output.result.confidence_label,
+        screening_recommendation=output.result.screening_recommendation,
+    )
+
     return AnalyzeResponse(
         filename=filename or "uploaded-image",
         quality=output.quality,
         features=output.features,
         result=output.result,
         processed_images=output.processed_images,
+        detected_findings=output.detected_findings,
+        history_entry=history_entry,
         lesion_regions=output.lesion_regions,
         image_shape=output.image_shape,
     )
 
 
-def normalize_calibration(calibration: dict[str, float] | None) -> dict[str, float]:
-    values = dict(DEFAULT_CALIBRATION)
+def fixed_processing_parameters() -> dict[str, float]:
+    return dict(INTERNAL_PROCESSING_PARAMETERS)
 
-    if calibration:
-        for key in values:
-            if key in calibration:
-                values[key] = float(calibration[key])
 
-    values["clahe_clip_limit"] = float(np.clip(values["clahe_clip_limit"], 0.8, 5.0))
-    values["exudate_percentile"] = float(np.clip(values["exudate_percentile"], 90.0, 99.5))
-    values["exudate_local_percentile"] = float(
-        np.clip(values["exudate_local_percentile"], 90.0, 99.8),
+def build_quality_blocked_output(
+    image: np.ndarray,
+    stage0: Stage0Masks,
+    quality: QualityReport,
+    image_id: str,
+    include_processed_images: bool,
+) -> PipelineOutput:
+    result = stage5_classify(empty_feature_report(), quality)
+    processed_images: dict[str, str] = {}
+
+    if include_processed_images:
+        processed_images = {
+            "original": encode_png(image),
+            "fov_mask": encode_png(stage0.fov_mask),
+            "optic_disc_mask": encode_png(stage0.optic_disc_mask),
+        }
+
+    return PipelineOutput(
+        quality=quality,
+        features=empty_feature_report(),
+        result=result,
+        processed_images=processed_images,
+        detected_findings=build_detection_findings(empty_feature_report()),
+        lesion_regions={"microaneurysms": [], "exudates": [], "vessels": []},
+        image_shape={
+            "height": int(image.shape[0]),
+            "width": int(image.shape[1]),
+        },
+        image_id=image_id,
     )
-    return values
+
+
+def empty_feature_report() -> FeatureReport:
+    return FeatureReport(
+        fundus_area=0,
+        vessel_density=0.0,
+        vessel_area=0,
+        bright_lesion_area=0,
+        dark_lesion_area=0,
+        microaneurysm_count=0,
+        microaneurysm_area=0,
+        exudate_count=0,
+        exudate_area=0,
+        hemorrhage_candidate_count=0,
+        optic_disc_area=0,
+        mean_intensity=0.0,
+        intensity_std=0.0,
+        texture_contrast=0.0,
+    )
 
 
 def extract_payload_from_image(
     image: np.ndarray,
-    calibration: dict[str, float] | None = None,
 ) -> FeatureExtractionPayload:
     success, buffer = cv2.imencode(".png", image)
 
@@ -250,12 +336,12 @@ def extract_payload_from_image(
         temp_path = Path(temp_file.name)
 
     try:
-        calibration_values = normalize_calibration(calibration)
+        processing_parameters = fixed_processing_parameters()
         return extract_feature_payload(
             temp_path,
-            clahe_clip_limit=calibration_values["clahe_clip_limit"],
-            exudate_percentile=calibration_values["exudate_percentile"],
-            exudate_local_percentile=calibration_values["exudate_local_percentile"],
+            clahe_clip_limit=processing_parameters["clahe_clip_limit"],
+            exudate_percentile=processing_parameters["exudate_percentile"],
+            exudate_local_percentile=processing_parameters["exudate_local_percentile"],
         )
     finally:
         try:
@@ -456,9 +542,9 @@ def stage3_extract_lesions(
     fov_mask: np.ndarray,
     optic_disc_mask: np.ndarray,
     vessels: np.ndarray,
-    calibration: dict[str, float] | None = None,
+    processing_parameters: dict[str, float] | None = None,
 ) -> LesionMasks:
-    calibration_values = normalize_calibration(calibration)
+    values = processing_parameters or fixed_processing_parameters()
     microaneurysms, microaneurysm_candidates = detect_microaneurysms(
         image=image,
         preprocessed=preprocessed,
@@ -471,8 +557,8 @@ def stage3_extract_lesions(
         fov_mask=fov_mask,
         optic_disc_mask=optic_disc_mask,
         vessels=vessels,
-        exudate_percentile=calibration_values["exudate_percentile"],
-        exudate_local_percentile=calibration_values["exudate_local_percentile"],
+        exudate_percentile=values["exudate_percentile"],
+        exudate_local_percentile=values["exudate_local_percentile"],
     )
 
     return LesionMasks(
@@ -812,18 +898,21 @@ def extract_spatial_features(
 
 def stage5_classify(features: FeatureReport, quality: QualityReport) -> ScreeningResult:
     if not quality.is_acceptable:
+        screening = screening_tier_for_stage(None)
         return ScreeningResult(
             classification="Image not suitable for DR screening",
             referable=False,
             dr_probability=0.0,
             stage=None,
             stage_label="Unstageable",
-            reason=", ".join(quality.warnings),
+            reason=", ".join(quality.retake_recommendations or quality.warnings),
             disclaimer=(
                 "Screening support only. Retake with a clear retinal image before "
                 "reviewing diabetic retinopathy features."
             ),
-            screening=screening_tier_for_stage(None),
+            confidence_label="Low Confidence",
+            screening=screening,
+            screening_recommendation=str(screening["recommendation"]),
         )
 
     supervised_result = classify_by_supervised_feature_model(features)
@@ -847,14 +936,17 @@ def stage5_classify(features: FeatureReport, quality: QualityReport) -> Screenin
             "medical diagnosis and must be reviewed by a qualified eye-care professional."
         ),
         model_type="rule_based",
+        confidence_label=confidence_label(None),
         screening=screening,
+        screening_recommendation=str(screening["recommendation"]),
     )
 
 
 def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningResult | None:
-    model = load_supervised_model()
+    stage_model = load_supervised_model()
+    binary_model = load_binary_screening_model()
 
-    if model is None:
+    if stage_model is None and binary_model is None:
         return None
 
     feature_names = supervised_model_feature_names()
@@ -862,12 +954,37 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
         [supervised_feature_vector_from_report(features, feature_names)],
         dtype=np.float64,
     )
-    stage = int(model.predict(feature_vector)[0])
-    probabilities = supervised_probabilities(model, feature_vector)
-    confidence = max(probabilities.values()) if probabilities else None
-    dr_probability = supervised_referable_probability(stage, probabilities)
-    label = ML_STAGE_LABELS.get(stage, f"Stage {stage}: DR")
+
+    stage: int | None = None
+    stage_label = "Unstageable"
+    stage_probabilities: dict[int, float] = {}
+    stage_confidence: float | None = None
+
+    if stage_model is not None:
+        stage = int(stage_model.predict(feature_vector)[0])
+        stage_probabilities = supervised_probabilities(stage_model, feature_vector)
+        stage_confidence = (
+            max(stage_probabilities.values()) if stage_probabilities else None
+        )
+        stage_label = ML_STAGE_LABELS.get(stage, f"Stage {stage}: DR")
+
+    referable = bool(screening_tier_for_stage(stage)["referable"])
+    dr_probability = supervised_referable_probability(stage, stage_probabilities)
     screening = screening_tier_for_stage(stage)
+    binary_probabilities: dict[int, float] = {}
+    binary_confidence: float | None = None
+    binary_threshold: float | None = None
+
+    if binary_model is not None:
+        binary_probabilities = supervised_probabilities(binary_model, feature_vector)
+        binary_threshold = load_binary_referable_threshold()
+        referable_probability = float(binary_probabilities.get(1, 0.0))
+        referable = bool(referable_probability >= binary_threshold)
+        dr_probability = round(float(np.clip(referable_probability * 100.0, 0.0, 100.0)), 1)
+        binary_confidence = (
+            max(binary_probabilities.values()) if binary_probabilities else None
+        )
+        screening = screening_tier_for_binary_referable(referable, binary_threshold)
 
     feature_summary = (
         f"MA={features.microaneurysm_count}, "
@@ -875,22 +992,39 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
         f"vessel density={features.vessel_density:.4f}, "
         f"GLCM contrast={features.glcm_contrast:.2f}"
     )
-    model_name = supervised_model_display_name()
-    reason = (
-        f"{model_name} prepared a decision-support stage estimate from "
-        f"{len(feature_names)} handcrafted retinal measurements ({feature_summary})."
+    reason_parts: list[str] = []
+
+    if stage_model is not None and stage is not None:
+        reason_parts.append(
+            f"{supervised_model_display_name()} estimated DR stage {stage} "
+            f"from {len(feature_names)} handcrafted retinal measurements ({feature_summary})."
+        )
+        if stage_confidence is not None:
+            reason_parts.append(f"Stage confidence is {stage_confidence:.2%}.")
+
+    if binary_model is not None:
+        reason_parts.append(
+            f"{binary_screening_model_display_name()} screened the case as "
+            f"{'Referable' if referable else 'Non-Referable'} "
+            f"using a recall-oriented probability threshold of {binary_threshold:.2f}."
+        )
+        if binary_confidence is not None:
+            reason_parts.append(f"Screening confidence is {binary_confidence:.2%}.")
+
+    model_type = dual_tier_model_type(stage_model is not None, binary_model is not None)
+    confidence = stage_confidence if stage_confidence is not None else binary_confidence
+    response_probabilities = build_dual_tier_probabilities(
+        stage_probabilities,
+        binary_probabilities,
     )
 
-    if confidence is not None:
-        reason += f" Estimated-stage confidence is {confidence:.2%}."
-
     return ScreeningResult(
-        classification=f"{screening['status']}: {label}",
-        referable=bool(screening["referable"]),
+        classification=f"{screening['status']}: {stage_label}",
+        referable=referable,
         dr_probability=dr_probability,
         stage=stage,
-        stage_label=label,
-        reason=reason,
+        stage_label=stage_label,
+        reason=" ".join(reason_parts),
         disclaimer=(
             "Supervised handcrafted-feature screening support only. This result "
             "is not a medical diagnosis and must be reviewed by a qualified "
@@ -898,11 +1032,48 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
             "under-called on some images, so clinician review and manual override "
             "are required."
         ),
-        model_type=f"{model_name}_handcrafted_features",
+        model_type=model_type,
         confidence=confidence,
-        probabilities={str(label): value for label, value in probabilities.items()},
+        confidence_label=confidence_label(confidence),
+        probabilities=response_probabilities,
         screening=screening,
+        screening_recommendation=str(screening["recommendation"]),
     )
+
+
+def confidence_label(confidence: float | None) -> str:
+    if confidence is None:
+        return "Medium Confidence"
+    if confidence >= 0.75:
+        return "High Confidence"
+    if confidence >= 0.45:
+        return "Medium Confidence"
+    return "Low Confidence"
+
+
+def build_detection_findings(features: FeatureReport) -> list[DetectionFinding]:
+    expanded = features.expanded_features or {}
+    vessel_abnormality = float(expanded.get("vessel_abnormality_score", 0.0))
+    cotton_wool_count = int(round(float(expanded.get("cotton_wool_count", 0.0))))
+
+    return [
+        DetectionFinding(
+            label="Microaneurysms",
+            detected=features.microaneurysm_count > 0,
+        ),
+        DetectionFinding(
+            label="Hard Exudates",
+            detected=features.exudate_count > 0,
+        ),
+        DetectionFinding(
+            label="Vessel Abnormalities",
+            detected=features.vessel_density > 0.08 or vessel_abnormality > 0.15,
+        ),
+        DetectionFinding(
+            label="Cotton Wool Spots",
+            detected=cotton_wool_count > 0,
+        ),
+    ]
 
 
 def load_supervised_model() -> Any | None:
@@ -913,7 +1084,7 @@ def load_supervised_model() -> Any | None:
         return _SUPERVISED_MODEL
 
     _SUPERVISED_MODEL_LOAD_ATTEMPTED = True
-    _SUPERVISED_MODEL_METADATA = load_supervised_metadata()
+    _SUPERVISED_MODEL_METADATA = load_supervised_metadata(ML_METADATA_PATH)
     _SUPERVISED_MODEL_FEATURE_NAMES = metadata_feature_names(_SUPERVISED_MODEL_METADATA)
 
     if not ML_MODEL_PATH.exists():
@@ -928,12 +1099,54 @@ def load_supervised_model() -> Any | None:
     return _SUPERVISED_MODEL
 
 
-def load_supervised_metadata() -> dict[str, Any]:
-    if not ML_METADATA_PATH.exists():
+def load_binary_screening_model() -> Any | None:
+    global _BINARY_SCREENING_MODEL, _BINARY_SCREENING_MODEL_LOAD_ATTEMPTED
+    global _BINARY_SCREENING_MODEL_METADATA
+
+    if _BINARY_SCREENING_MODEL_LOAD_ATTEMPTED:
+        return _BINARY_SCREENING_MODEL
+
+    _BINARY_SCREENING_MODEL_LOAD_ATTEMPTED = True
+    _BINARY_SCREENING_MODEL_METADATA = load_supervised_metadata(BINARY_SCREENING_METADATA_PATH)
+
+    if not BINARY_SCREENING_MODEL_PATH.exists():
+        return None
+
+    try:
+        with BINARY_SCREENING_MODEL_PATH.open("rb") as file:
+            _BINARY_SCREENING_MODEL = pickle.load(file)
+    except Exception:
+        _BINARY_SCREENING_MODEL = None
+
+    return _BINARY_SCREENING_MODEL
+
+
+def load_binary_referable_threshold() -> float:
+    global _BINARY_REFERABLE_THRESHOLD
+
+    if _BINARY_REFERABLE_THRESHOLD is not None:
+        return _BINARY_REFERABLE_THRESHOLD
+
+    threshold = DEFAULT_BINARY_REFERABLE_THRESHOLD
+    if BINARY_REFERABLE_THRESHOLD_PATH.exists():
+        try:
+            payload = json.loads(BINARY_REFERABLE_THRESHOLD_PATH.read_text(encoding="utf-8"))
+            value = payload.get("threshold") if isinstance(payload, dict) else None
+            if value is not None:
+                threshold = float(value)
+        except Exception:
+            threshold = DEFAULT_BINARY_REFERABLE_THRESHOLD
+
+    _BINARY_REFERABLE_THRESHOLD = threshold
+    return threshold
+
+
+def load_supervised_metadata(metadata_path: Path = ML_METADATA_PATH) -> dict[str, Any]:
+    if not metadata_path.exists():
         return {}
 
     try:
-        with ML_METADATA_PATH.open("r", encoding="utf-8") as file:
+        with metadata_path.open("r", encoding="utf-8") as file:
             metadata = json.load(file)
     except Exception:
         return {}
@@ -960,6 +1173,52 @@ def supervised_model_feature_names() -> list[str]:
 def supervised_model_display_name() -> str:
     name = _SUPERVISED_MODEL_METADATA.get("best_model_name", "ScikitLearnClassifier")
     return str(name)
+
+
+def binary_screening_model_display_name() -> str:
+    name = _BINARY_SCREENING_MODEL_METADATA.get("best_model_name", "BinaryScreeningClassifier")
+    return str(name)
+
+
+def dual_tier_model_type(has_stage_model: bool, has_binary_model: bool) -> str:
+    if has_stage_model and has_binary_model:
+        return "dual_tier_handcrafted_features"
+    if has_binary_model:
+        return f"{binary_screening_model_display_name()}_binary_screening"
+    return f"{supervised_model_display_name()}_handcrafted_features"
+
+
+def get_supervised_model_status() -> dict[str, object]:
+    stage_model = load_supervised_model()
+    binary_model = load_binary_screening_model()
+    return {
+        "multiclass_loaded": stage_model is not None,
+        "multiclass_model": (
+            supervised_model_display_name() if stage_model is not None else None
+        ),
+        "binary_loaded": binary_model is not None,
+        "binary_model": (
+            binary_screening_model_display_name() if binary_model is not None else None
+        ),
+        "dual_tier_ready": stage_model is not None and binary_model is not None,
+        "binary_threshold": load_binary_referable_threshold(),
+    }
+
+
+def build_dual_tier_probabilities(
+    stage_probabilities: dict[int, float],
+    binary_probabilities: dict[int, float],
+) -> dict[str, float]:
+    probabilities: dict[str, float] = {}
+
+    for label, value in stage_probabilities.items():
+        probabilities[ML_STAGE_LABELS.get(int(label), str(label))] = float(value)
+
+    if binary_probabilities:
+        probabilities["Non-Referable"] = float(binary_probabilities.get(0, 0.0))
+        probabilities["Referable"] = float(binary_probabilities.get(1, 0.0))
+
+    return probabilities
 
 
 def supervised_feature_vector_from_report(
@@ -1050,7 +1309,10 @@ def screening_tier_for_stage(stage: int | None) -> dict[str, Any]:
             "status": "Referable",
             "referable": True,
             "rule": "Stages 2-4 are mapped to referable screening-support review.",
-            "recommendation": "Forward the case for eye-care specialist review.",
+            "recommendation": (
+                "Referable diabetic retinopathy detected. Specialist evaluation "
+                "recommended."
+            ),
         }
 
     return {
@@ -1058,8 +1320,46 @@ def screening_tier_for_stage(stage: int | None) -> dict[str, Any]:
         "referable": False,
         "rule": "Stages 0-1 are mapped to non-referable screening-support review.",
         "recommendation": (
-            "Document the estimate only after clinician review; continue routine "
-            "screening if the clinician agrees."
+            "No significant referable diabetic retinopathy findings detected. "
+            "Routine ophthalmology follow-up recommended after clinician review."
+        ),
+    }
+
+
+def screening_tier_for_binary_referable(
+    referable: bool,
+    threshold: float | None = None,
+) -> dict[str, Any]:
+    threshold_text = (
+        f"{threshold:.2f}"
+        if threshold is not None
+        else f"{DEFAULT_BINARY_REFERABLE_THRESHOLD:.2f}"
+    )
+
+    if referable:
+        return {
+            "status": "Referable",
+            "referable": True,
+            "rule": (
+                "Binary screening model classified the case as referable using "
+                f"optimized probability threshold {threshold_text}."
+            ),
+            "recommendation": (
+                "Referable diabetic retinopathy detected. Specialist evaluation "
+                "recommended."
+            ),
+        }
+
+    return {
+        "status": "Non-Referable",
+        "referable": False,
+        "rule": (
+            "Binary screening model classified the case as non-referable using "
+            f"optimized probability threshold {threshold_text}."
+        ),
+        "recommendation": (
+            "No significant referable diabetic retinopathy findings detected. "
+            "Routine ophthalmology follow-up recommended after clinician review."
         ),
     }
 
@@ -1113,15 +1413,22 @@ def assess_quality(image: np.ndarray, green: np.ndarray, mask: np.ndarray) -> Qu
         return QualityReport(
             is_acceptable=False,
             blur_score=0.0,
+            sharpness=0.0,
             brightness_mean=0.0,
             contrast_std=0.0,
+            signal_to_noise_ratio=0.0,
+            quality_score=0,
+            quality_label="Poor",
             fundus_area_ratio=0.0,
             warnings=["Retinal field could not be detected."],
+            retake_recommendations=["Retina not fully visible. Please retake the image."],
         )
 
     blur_score = float(cv2.Laplacian(green, cv2.CV_64F).var())
+    sharpness = float(np.sqrt(max(blur_score, 0.0)))
     brightness_mean = float(np.mean(pixels))
     contrast_std = float(np.std(pixels))
+    signal_to_noise_ratio = float(brightness_mean / max(contrast_std, 1.0))
     fundus_area_ratio = float(np.count_nonzero(mask) / mask.size)
     vessel_hint = estimate_vessel_hint(green, mask)
     retinal_warnings, retinal_blockers = assess_retinal_field(
@@ -1156,15 +1463,82 @@ def assess_quality(image: np.ndarray, green: np.ndarray, mask: np.ndarray) -> Qu
         warnings.append("Detected retinal field is too small.")
 
     warnings = unique_warnings([*blocking_warnings, *warnings])
-
-    return QualityReport(
-        is_acceptable=len(blocking_warnings) == 0,
+    quality_score = calculate_quality_score(
         blur_score=blur_score,
+        sharpness=sharpness,
         brightness_mean=brightness_mean,
         contrast_std=contrast_std,
+        signal_to_noise_ratio=signal_to_noise_ratio,
+        fundus_area_ratio=fundus_area_ratio,
+        blocking_warning_count=len(blocking_warnings),
+    )
+    retake_recommendations = retake_recommendations_from_warnings(warnings)
+    is_acceptable = len(blocking_warnings) == 0 and quality_score >= MIN_ANALYSIS_QUALITY_SCORE
+
+    return QualityReport(
+        is_acceptable=is_acceptable,
+        blur_score=blur_score,
+        sharpness=sharpness,
+        brightness_mean=brightness_mean,
+        contrast_std=contrast_std,
+        signal_to_noise_ratio=signal_to_noise_ratio,
+        quality_score=quality_score,
+        quality_label=quality_label(quality_score),
         fundus_area_ratio=fundus_area_ratio,
         warnings=warnings,
+        retake_recommendations=retake_recommendations,
     )
+
+
+def calculate_quality_score(
+    blur_score: float,
+    sharpness: float,
+    brightness_mean: float,
+    contrast_std: float,
+    signal_to_noise_ratio: float,
+    fundus_area_ratio: float,
+    blocking_warning_count: int,
+) -> int:
+    blur_component = np.clip(blur_score / 90.0, 0.0, 1.0)
+    sharpness_component = np.clip(sharpness / 14.0, 0.0, 1.0)
+    brightness_component = 1.0 - np.clip(abs(brightness_mean - 115.0) / 115.0, 0.0, 1.0)
+    contrast_component = np.clip(contrast_std / 45.0, 0.0, 1.0)
+    snr_component = 1.0 - np.clip(abs(signal_to_noise_ratio - 4.0) / 8.0, 0.0, 1.0)
+    coverage_component = np.clip(fundus_area_ratio / 0.55, 0.0, 1.0)
+    raw_score = (
+        blur_component * 22.0
+        + sharpness_component * 14.0
+        + brightness_component * 20.0
+        + contrast_component * 18.0
+        + snr_component * 10.0
+        + coverage_component * 16.0
+    )
+    penalty = blocking_warning_count * 18.0
+    return int(round(float(np.clip(raw_score - penalty, 0.0, 100.0))))
+
+
+def quality_label(score: int) -> str:
+    if score >= 80:
+        return "Good"
+    if score >= MIN_ANALYSIS_QUALITY_SCORE:
+        return "Acceptable"
+    return "Poor"
+
+
+def retake_recommendations_from_warnings(warnings: list[str]) -> list[str]:
+    recommendations: list[str] = []
+    joined = " ".join(warnings).lower()
+
+    if "blurry" in joined or "blur" in joined:
+        recommendations.append("Image too blurry. Please retake the image.")
+    if "retinal field" in joined or "round enough" in joined:
+        recommendations.append("Retina not fully visible.")
+    if "dark" in joined or "bright" in joined or "exposed" in joined or "contrast" in joined:
+        recommendations.append("Poor lighting detected.")
+    if "too small" in joined or "boundary" in joined:
+        recommendations.append("Fundus coverage insufficient.")
+
+    return unique_warnings(recommendations)
 
 
 def assess_retinal_field(
@@ -1247,10 +1621,15 @@ def add_feature_quality_warnings(
     return QualityReport(
         is_acceptable=quality.is_acceptable,
         blur_score=quality.blur_score,
+        sharpness=quality.sharpness,
         brightness_mean=quality.brightness_mean,
         contrast_std=quality.contrast_std,
+        signal_to_noise_ratio=quality.signal_to_noise_ratio,
+        quality_score=quality.quality_score,
+        quality_label=quality.quality_label,
         fundus_area_ratio=quality.fundus_area_ratio,
         warnings=unique_warnings(warnings),
+        retake_recommendations=quality.retake_recommendations,
     )
 
 

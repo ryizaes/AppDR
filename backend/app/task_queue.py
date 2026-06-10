@@ -21,13 +21,12 @@ _LOCAL_TASK_LOCK = Lock()
 def submit_analysis(
     filename: str,
     image_bytes: bytes,
-    calibration: dict[str, float] | None = None,
 ) -> str:
     if celery_enabled():
         from app.tasks import analyze_image_task
 
         encoded = base64.b64encode(image_bytes).decode("ascii")
-        async_result = analyze_image_task.delay(filename, encoded, calibration or {})
+        async_result = analyze_image_task.delay(filename, encoded)
         return str(async_result.id)
 
     task_id = uuid4().hex
@@ -46,7 +45,6 @@ def submit_analysis(
         task_id,
         filename,
         image_bytes,
-        calibration or {},
     )
     return task_id
 
@@ -98,7 +96,6 @@ def run_local_analysis(
     task_id: str,
     filename: str,
     image_bytes: bytes,
-    calibration: dict[str, float],
 ) -> None:
     update_local_task(
         task_id,
@@ -107,7 +104,7 @@ def run_local_analysis(
     )
 
     try:
-        output = analyze_image(image_bytes, calibration=calibration)
+        output = analyze_image(image_bytes)
         response = build_analyze_response(filename, output)
         update_local_task(
             task_id,

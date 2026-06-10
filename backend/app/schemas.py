@@ -4,10 +4,15 @@ from pydantic import BaseModel, Field
 class QualityReport(BaseModel):
     is_acceptable: bool
     blur_score: float
+    sharpness: float = 0.0
     brightness_mean: float
     contrast_std: float
+    signal_to_noise_ratio: float = 0.0
+    quality_score: int = 0
+    quality_label: str = "Poor"
     fundus_area_ratio: float
     warnings: list[str] = Field(default_factory=list)
+    retake_recommendations: list[str] = Field(default_factory=list)
 
 
 class FeatureReport(BaseModel):
@@ -64,6 +69,19 @@ class ScreeningTier(BaseModel):
     recommendation: str
 
 
+class DetectionFinding(BaseModel):
+    label: str
+    detected: bool
+
+
+class AnalysisHistoryEntry(BaseModel):
+    image_id: str
+    date_analyzed: str
+    dr_stage: int | None = None
+    confidence_level: str
+    screening_recommendation: str
+
+
 class ScreeningResult(BaseModel):
     classification: str
     referable: bool
@@ -74,8 +92,10 @@ class ScreeningResult(BaseModel):
     disclaimer: str
     model_type: str = "rule_based"
     confidence: float | None = None
+    confidence_label: str = "Low Confidence"
     probabilities: dict[str, float] = Field(default_factory=dict)
     screening: ScreeningTier | None = None
+    screening_recommendation: str = ""
 
 
 class AnalyzeResponse(BaseModel):
@@ -84,6 +104,8 @@ class AnalyzeResponse(BaseModel):
     features: FeatureReport
     result: ScreeningResult
     processed_images: dict[str, str]
+    detected_findings: list[DetectionFinding] = Field(default_factory=list)
+    history_entry: AnalysisHistoryEntry | None = None
     lesion_regions: dict[str, list[LesionRegion]] = Field(default_factory=dict)
     image_shape: dict[str, int] = Field(default_factory=dict)
 
