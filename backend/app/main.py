@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.pipeline import analyze_image, build_analyze_response, get_supervised_model_status
 from app.schemas import AnalyzeResponse, AnalyzeTaskResponse, AnalyzeTaskStatusResponse
-from app.task_queue import get_task_status, submit_analysis
+from app.task_queue import get_task_status, submit_analysis, user_safe_analysis_error
 
 app = FastAPI(
     title="DR Screening Classical Processing API",
@@ -35,7 +35,7 @@ def root() -> dict[str, object]:
         ),
         "clinical_review_required": True,
         "limitations": [
-            "Stage estimates must be reviewed by a qualified eye-care professional.",
+            "Screening classifications must be reviewed by a qualified eye-care professional.",
             "Severe and proliferative stages may be under-called on some images.",
             "Use /docs for API testing and /health for connectivity checks.",
         ],
@@ -96,11 +96,11 @@ async def analyze_sync(
     try:
         output = analyze_image(image_bytes)
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(status_code=400, detail=user_safe_analysis_error(error)) from error
     except Exception as error:
         raise HTTPException(
             status_code=500,
-            detail=f"Image processing failed: {error}",
+            detail=user_safe_analysis_error(error),
         ) from error
 
     return build_analyze_response(file.filename or "uploaded-image", output)

@@ -1,0 +1,37 @@
+{
+  "row_count": 15958,
+  "feature_count": 203,
+  "nan_cell_count": 0,
+  "inf_cell_count": 0,
+  "nan_features": {},
+  "inf_features": {},
+  "duplicate_feature_row_count": 0,
+  "exact_duplicate_row_count": 0,
+  "duplicate_feature_row_indices_preview": [],
+  "constant_feature_count": 0,
+  "constant_features": [],
+  "near_zero_variance_feature_count": 5,
+  "near_zero_variance_features": [
+    "ma_density_per_retinal_area",
+    "rgb_b_min",
+    "hsv_h_min",
+    "hsv_s_min",
+    "hsv_s_max"
+  ],
+  "variance_summary": {
+    "min": 1.237997985249191e-10,
+    "median": 42.66331917471231,
+    "max": 1.8908339747033589e+24
+  },
+  "sanitization": {
+    "nan_cells_before": 0,
+    "inf_cells_before": 0,
+    "nonfinite_cells_before": 0,
+    "rows_removed_all_features_missing": 0,
+    "nan_cells_after": 0,
+    "inf_cells_after": 0,
+    "max_abs_finite_after": 12233498165248.0
+  },
+  "exact_duplicate_rows_removed": 0,
+  "duplicate_feature_rows_removed": 0
+}

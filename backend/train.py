@@ -59,6 +59,7 @@ import config
 from predict import (
     ENGINEERED_FEATURE_NAMES,
     ClinicalFeatureEngineer,
+    FeatureNameFrame,
     FeatureNameSelector,
 )
 
@@ -81,6 +82,7 @@ except ImportError:  # pragma: no cover - handled through dependency report.
 
 RANDOM_STATE = 42
 TEST_SIZE = 0.20
+VALIDATION_SIZE = 0.20
 CV_FOLDS = 5
 MIN_OPTUNA_TRIALS = 50
 FEATURE_COUNTS: list[int | str | None] = ["all_203", None, 150, 100, 75, 50]
@@ -113,14 +115,19 @@ def train_models(
     results_dir: str | Path = config.RESULTS_DIR,
     n_trials: int = MIN_OPTUNA_TRIALS,
     binary_referable: bool = False,
+    resume_completed: bool = False,
+    smoke: bool = False,
+    skip_interpretability: bool = False,
 ) -> dict[str, Any]:
     """Run the complete training, selection, and artifact export workflow."""
-    if n_trials < MIN_OPTUNA_TRIALS:
+    if n_trials < MIN_OPTUNA_TRIALS and not smoke:
         raise ValueError(f"Optuna must run at least {MIN_OPTUNA_TRIALS} trials per model.")
 
     np.random.seed(RANDOM_STATE)
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     output_dir = ensure_dir(results_dir)
+    mode = "binary referable" if binary_referable else "multiclass DR grading"
+    print(f"Loading dataset for {mode}: {features_csv}", flush=True)
 
     table, feature_names, y_values, data_quality = load_and_validate_dataset(
         features_csv,
@@ -138,8 +145,8 @@ def train_models(
         y_values = remap_labels_to_binary_referable(y_values)
         label_remapping = {
             "mode": "binary_referable",
-            "source": "multiclass_dr_stages",
-            "rule": "Stages 0-1 map to Non-Referable (0); stages 2-4 map to Referable (1).",
+            "source": "multiclass_dr_grades",
+            "rule": "DR grades 0-1 map to Non-Referable (0); grades 2-4 map to Referable (1).",
             "mapping": {str(key): value for key, value in BINARY_REFERABLE_MAPPING.items()},
             "class_names": {str(key): value for key, value in BINARY_REFERABLE_CLASS_NAMES.items()},
             "source_stage_distribution": source_distribution,
@@ -156,6 +163,11 @@ def train_models(
     if label_remapping is not None:
         class_distribution["label_remapping"] = label_remapping
     save_json(output_dir / "class_distribution.json", class_distribution)
+    print(
+        f"Validated {len(y_values)} samples, {len(feature_names)} features, "
+        f"problem={problem_type}",
+        flush=True,
+    )
 
     x_values = table[feature_names].to_numpy(dtype=np.float64)
     x_values[~np.isfinite(x_values)] = np.nan
@@ -163,11 +175,11 @@ def train_models(
 
     validate_enough_samples_for_split(y_values, class_labels)
     (
-        x_train,
+        x_train_validation,
         x_test,
-        y_train,
+        y_train_validation,
         y_test,
-        train_indices,
+        train_validation_indices,
         test_indices,
     ) = train_test_split(
         x_values,
@@ -177,7 +189,37 @@ def train_models(
         random_state=RANDOM_STATE,
         stratify=y_values,
     )
+    (
+        x_train,
+        x_validation,
+        y_train,
+        y_validation,
+        train_indices,
+        validation_indices,
+    ) = train_test_split(
+        x_train_validation,
+        y_train_validation,
+        train_validation_indices,
+        test_size=VALIDATION_SIZE,
+        random_state=RANDOM_STATE,
+        stratify=y_train_validation,
+    )
+    print(
+        "Created stratified split: "
+        f"train={len(y_train)}, validation={len(y_validation)}, test={len(y_test)}",
+        flush=True,
+    )
     validate_enough_samples_for_cv(y_train, class_labels, context="training split")
+    split_report = build_split_report(
+        y_train=y_train,
+        y_validation=y_validation,
+        y_test=y_test,
+        train_indices=train_indices,
+        validation_indices=validation_indices,
+        test_indices=test_indices,
+        class_labels=class_labels,
+    )
+    save_json(output_dir / "split_report.json", split_report)
 
     cv = StratifiedKFold(
         n_splits=CV_FOLDS,
@@ -194,6 +236,10 @@ def train_models(
         cv=cv,
     )
     save_json(output_dir / "preprocessing_report.json", preprocessing_report)
+    print(
+        f"Selected scaler={scaler_name}, engineered_features={engineering_enabled}",
+        flush=True,
+    )
 
     full_feature_names = build_available_feature_names(feature_names, engineering_enabled)
     selected_features, selection_report = select_optimal_features(
@@ -207,6 +253,11 @@ def train_models(
         class_labels=class_labels,
         cv=cv,
         output_dir=output_dir,
+    )
+    print(
+        f"Selected {len(selected_features)} features via "
+        f"{selection_report['best_method']}",
+        flush=True,
     )
     save_json(
         output_dir / "selected_features.json",
@@ -245,6 +296,7 @@ def train_models(
         cv=cv,
         n_trials=n_trials,
         output_dir=output_dir,
+        resume_completed=resume_completed,
     )
 
     ensemble_candidates = build_ensemble_candidates(
@@ -262,6 +314,7 @@ def train_models(
     )
 
     all_candidates = [*optimized_candidates, *ensemble_candidates]
+    print(f"Built {len(ensemble_candidates)} ensemble candidates", flush=True)
     calibration_candidates, calibration_report = evaluate_calibration_candidates(
         ranked_candidates(all_candidates)[:3],
         x_train=x_train,
@@ -277,6 +330,7 @@ def train_models(
     )
     all_candidates.extend(calibration_candidates)
     save_json(output_dir / "calibration_report.json", calibration_report)
+    print(f"Evaluated {len(calibration_candidates)} calibration candidates", flush=True)
 
     ranked = ranked_candidates(all_candidates)
     save_model_comparison(ranked, output_dir / "model_comparison_results.csv")
@@ -295,8 +349,24 @@ def train_models(
     }
     save_json(output_dir / "optimal_threshold.json", optimal_threshold)
 
+    validation_model = clone(best_candidate.pipeline)
+    fit_estimator(validation_model, x_train, y_train)
+    validation_metrics = evaluate_holdout_model(
+        model=validation_model,
+        x_test=x_validation,
+        y_test=y_validation,
+        sample_indices=validation_indices,
+        problem_type=problem_type,
+        class_labels=class_labels,
+        threshold=optimal_threshold.get("threshold"),
+        output_dir=output_dir,
+        split_name="validation",
+    )
+
+    x_final_train = np.vstack([x_train, x_validation])
+    y_final_train = np.concatenate([y_train, y_validation])
     best_model = clone(best_candidate.pipeline)
-    fit_estimator(best_model, x_train, y_train)
+    fit_estimator(best_model, x_final_train, y_final_train)
     save_pickle(output_dir / "best_model.pkl", best_model)
     save_pipeline_artifacts(best_model, output_dir)
 
@@ -309,17 +379,21 @@ def train_models(
         class_labels=class_labels,
         threshold=optimal_threshold.get("threshold"),
         output_dir=output_dir,
+        split_name="test",
     )
 
-    explainer, importance_rows = build_interpretability_artifacts(
-        model=best_model,
-        x_reference=x_train,
-        x_eval=x_test,
-        y_eval=y_test,
-        problem_type=problem_type,
-        class_labels=class_labels,
-        output_dir=output_dir,
-    )
+    if skip_interpretability:
+        explainer, importance_rows = None, []
+    else:
+        explainer, importance_rows = build_interpretability_artifacts(
+            model=best_model,
+            x_reference=x_final_train,
+            x_eval=x_test,
+            y_eval=y_test,
+            problem_type=problem_type,
+            class_labels=class_labels,
+            output_dir=output_dir,
+        )
     save_pickle(output_dir / "explainer.pkl", explainer)
     save_feature_importance(importance_rows, output_dir / "feature_importance.csv")
 
@@ -332,8 +406,11 @@ def train_models(
         "best_params": best_candidate.best_params,
         "random_state": RANDOM_STATE,
         "test_size": TEST_SIZE,
+        "validation_size_of_train_validation": VALIDATION_SIZE,
         "cv_folds": CV_FOLDS,
         "optuna_trials_per_model": n_trials,
+        "smoke_run": bool(smoke),
+        "interpretability_skipped": bool(skip_interpretability),
         "scaler": scaler_name,
         "engineered_features_enabled": bool(engineering_enabled),
         "selected_feature_count": len(selected_features),
@@ -343,6 +420,7 @@ def train_models(
         "data_quality": data_quality,
         "preprocessing_report": preprocessing_report,
         "feature_selection_report": selection_report,
+        "split_report": split_report,
         "calibration_report": calibration_report,
         "cross_validation": {
             candidate.name: candidate.cv_metrics
@@ -353,6 +431,7 @@ def train_models(
             for index, candidate in enumerate(ranked)
         ],
         "holdout": holdout_metrics,
+        "validation": validation_metrics,
         "optimal_threshold": optimal_threshold,
         "artifact_paths": artifact_path_report(),
     }
@@ -376,10 +455,12 @@ def train_models(
             "random_state": RANDOM_STATE,
             "threshold": optimal_threshold.get("threshold"),
             "artifact_paths": artifact_path_report(),
+            "interpretability_skipped": bool(skip_interpretability),
         },
     )
 
     print(f"Best model: {best_candidate.name}")
+    print(f"Validation F1: {validation_metrics['f1']:.4f}")
     print(f"Holdout F1: {holdout_metrics['f1']:.4f}")
     print(f"Holdout recall: {holdout_metrics['recall']:.4f}")
     print(f"Artifacts saved under: {Path(results_dir)}")
@@ -404,16 +485,34 @@ def load_and_validate_dataset(
         raise ValueError("Labels must be integer class values.") from exc
 
     report = build_data_quality_report(table, feature_frame, feature_names)
-    duplicate_mask = table.duplicated(subset=[*feature_names, "label"], keep="first")
-    duplicate_count = int(duplicate_mask.sum())
-    if duplicate_count:
-        table = table.loc[~duplicate_mask].reset_index(drop=True)
-        feature_frame = feature_frame.loc[~duplicate_mask].reset_index(drop=True)
-        y_values = y_values[~duplicate_mask.to_numpy()]
-    report["exact_duplicate_rows_removed"] = duplicate_count
+    feature_frame, sanitization_report, keep_mask = sanitize_feature_frame(feature_frame)
+    if not np.all(keep_mask):
+        table = table.loc[keep_mask].reset_index(drop=True)
+        y_values = y_values[keep_mask.to_numpy()]
+    report["sanitization"] = sanitization_report
+    exact_duplicate_mask = table.duplicated(subset=[*feature_names, "label"], keep="first")
+    exact_duplicate_count = int(exact_duplicate_mask.sum())
+    if exact_duplicate_count:
+        table = table.loc[~exact_duplicate_mask].reset_index(drop=True)
+        feature_frame = feature_frame.loc[~exact_duplicate_mask].reset_index(drop=True)
+        y_values = y_values[~exact_duplicate_mask.to_numpy()]
+
+    # Prevent train/test leakage from repeated extracted feature vectors, even
+    # when duplicate rows disagree on label. There is no raw image identifier in
+    # features.csv, so exact feature-vector duplication is the safest available
+    # proxy for duplicated images or duplicated extraction output.
+    duplicate_feature_mask = feature_frame.duplicated(keep="first")
+    duplicate_feature_count = int(duplicate_feature_mask.sum())
+    if duplicate_feature_count:
+        table = table.loc[~duplicate_feature_mask].reset_index(drop=True)
+        feature_frame = feature_frame.loc[~duplicate_feature_mask].reset_index(drop=True)
+        y_values = y_values[~duplicate_feature_mask.to_numpy()]
+
+    report["exact_duplicate_rows_removed"] = exact_duplicate_count
+    report["duplicate_feature_rows_removed"] = duplicate_feature_count
 
     for name in feature_names:
-        table[name] = feature_frame[name].replace([np.inf, -np.inf], np.nan)
+        table[name] = feature_frame[name]
 
     return table, feature_names, y_values, report
 
@@ -503,6 +602,34 @@ def build_data_quality_report(
     }
 
 
+def sanitize_feature_frame(
+    features: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, Any], pd.Series]:
+    raw_values = features.to_numpy(dtype=np.float64)
+    nonfinite_mask = ~np.isfinite(raw_values)
+    cleaned = features.replace([np.inf, -np.inf], np.nan).copy()
+    valid_value_counts = cleaned.notna().sum(axis=1)
+    keep_mask = valid_value_counts > 0
+    cleaned = cleaned.loc[keep_mask].reset_index(drop=True)
+    cleaned_values = cleaned.to_numpy(dtype=np.float64)
+    remaining_inf = int(np.isinf(cleaned_values).sum())
+    finite_values = np.where(np.isfinite(cleaned_values), cleaned_values, np.nan)
+    report = {
+        "nan_cells_before": int(np.isnan(raw_values).sum()),
+        "inf_cells_before": int(np.isinf(raw_values).sum()),
+        "nonfinite_cells_before": int(nonfinite_mask.sum()),
+        "rows_removed_all_features_missing": int((~keep_mask).sum()),
+        "nan_cells_after": int(np.isnan(cleaned_values).sum()),
+        "inf_cells_after": remaining_inf,
+        "max_abs_finite_after": float(np.nanmax(np.abs(finite_values)))
+        if np.any(np.isfinite(finite_values))
+        else 0.0,
+    }
+    if remaining_inf:
+        raise ValueError("Feature sanitization failed: infinite values remain.")
+    return cleaned, report, keep_mask
+
+
 def detect_problem_type(y_values: np.ndarray) -> tuple[str, list[int]]:
     unique_labels = sorted(int(value) for value in np.unique(y_values))
     if len(unique_labels) < 2:
@@ -512,7 +639,7 @@ def detect_problem_type(y_values: np.ndarray) -> tuple[str, list[int]]:
     if set(unique_labels).issubset({0, 1, 2, 3, 4}):
         return "multiclass", [0, 1, 2, 3, 4]
     raise ValueError(
-        "Labels must be binary {0, 1} or multiclass DR stages {0, 1, 2, 3, 4}.",
+        "Labels must be binary {0, 1} or multiclass DR grades {0, 1, 2, 3, 4}.",
     )
 
 
@@ -520,7 +647,7 @@ def remap_labels_to_binary_referable(y_values: np.ndarray) -> np.ndarray:
     unique = {int(value) for value in np.unique(y_values)}
     if not unique.issubset(set(BINARY_REFERABLE_SOURCE_LABELS)):
         raise ValueError(
-            "Binary referable remapping requires DR stage labels in {0, 1, 2, 3, 4}.",
+            "Binary referable remapping requires DR grade labels in {0, 1, 2, 3, 4}.",
         )
 
     return np.asarray(
@@ -565,6 +692,48 @@ def build_class_distribution(
             for label in class_labels
         }
     return payload
+
+
+def build_split_report(
+    y_train: np.ndarray,
+    y_validation: np.ndarray,
+    y_test: np.ndarray,
+    train_indices: np.ndarray,
+    validation_indices: np.ndarray,
+    test_indices: np.ndarray,
+    class_labels: list[int],
+) -> dict[str, Any]:
+    return {
+        "random_state": RANDOM_STATE,
+        "test_size": TEST_SIZE,
+        "validation_size_of_train_validation": VALIDATION_SIZE,
+        "train_count": int(len(y_train)),
+        "validation_count": int(len(y_validation)),
+        "test_count": int(len(y_test)),
+        "train_class_counts": {
+            str(label): int(np.sum(y_train == label)) for label in class_labels
+        },
+        "validation_class_counts": {
+            str(label): int(np.sum(y_validation == label)) for label in class_labels
+        },
+        "test_class_counts": {
+            str(label): int(np.sum(y_test == label)) for label in class_labels
+        },
+        "train_indices_preview": [int(index) for index in train_indices[:20]],
+        "validation_indices_preview": [int(index) for index in validation_indices[:20]],
+        "test_indices_preview": [int(index) for index in test_indices[:20]],
+        "leakage_check": {
+            "train_validation_overlap": bool(
+                set(map(int, train_indices)).intersection(map(int, validation_indices))
+            ),
+            "train_test_overlap": bool(
+                set(map(int, train_indices)).intersection(map(int, test_indices))
+            ),
+            "validation_test_overlap": bool(
+                set(map(int, validation_indices)).intersection(map(int, test_indices))
+            ),
+        },
+    }
 
 
 def validate_enough_samples_for_split(y_values: np.ndarray, labels: list[int]) -> None:
@@ -825,6 +994,7 @@ def optimize_all_models(
     cv: StratifiedKFold,
     n_trials: int,
     output_dir: Path,
+    resume_completed: bool,
 ) -> list[CandidateResult]:
     model_names = [
         "Logistic Regression",
@@ -851,26 +1021,27 @@ def optimize_all_models(
             )
             continue
 
-        resumed = load_completed_optuna_candidate(
-            model_name=model_name,
-            x_train=x_train,
-            y_train=y_train,
-            feature_names=feature_names,
-            full_feature_names=full_feature_names,
-            selected_features=selected_features,
-            scaler_name=scaler_name,
-            engineering_enabled=engineering_enabled,
-            problem_type=problem_type,
-            class_labels=class_labels,
-            cv=cv,
-            n_trials=n_trials,
-            output_dir=output_dir,
-        )
-        if resumed is not None:
-            candidate, row = resumed
-            candidates.append(candidate)
-            optuna_rows.append(row)
-            continue
+        if resume_completed:
+            resumed = load_completed_optuna_candidate(
+                model_name=model_name,
+                x_train=x_train,
+                y_train=y_train,
+                feature_names=feature_names,
+                full_feature_names=full_feature_names,
+                selected_features=selected_features,
+                scaler_name=scaler_name,
+                engineering_enabled=engineering_enabled,
+                problem_type=problem_type,
+                class_labels=class_labels,
+                cv=cv,
+                n_trials=n_trials,
+                output_dir=output_dir,
+            )
+            if resumed is not None:
+                candidate, row = resumed
+                candidates.append(candidate)
+                optuna_rows.append(row)
+                continue
 
         print(f"Optimizing {model_name} ({n_trials} Optuna trials)", flush=True)
         study = optuna.create_study(
@@ -1394,7 +1565,7 @@ def evaluate_calibration_candidates(
                     "method": method,
                     "status": "completed",
                     "roc_auc_mean": metrics.get("roc_auc", {}).get("mean", 0.0),
-                    "brier_score_mean": metrics.get("brier_score", {}).get("mean", math.inf),
+                    "brier_score_mean": metrics.get("brier_score", {}).get("mean", 1.0),
                     "f1_mean": metrics["f1"]["mean"],
                     "recall_mean": metrics["recall"]["mean"],
                 },
@@ -1404,7 +1575,7 @@ def evaluate_calibration_candidates(
     completed.sort(
         key=lambda row: (
             float(row.get("roc_auc_mean", 0.0)),
-            -float(row.get("brier_score_mean", math.inf)),
+            -float(row.get("brier_score_mean", 1.0)),
         ),
         reverse=True,
     )
@@ -1435,6 +1606,7 @@ def make_pipeline(
             ),
             ("imputer", SimpleImputer(strategy="median")),
             ("scaler", build_scaler(scaler_name)),
+            ("feature_frame", FeatureNameFrame(selected_features)),
             ("classifier", classifier),
         ],
     )
@@ -1620,19 +1792,21 @@ def compute_metrics(
         metrics["brier_score"] = multiclass_brier_score(y_true, probabilities, class_labels)
     else:
         metrics["roc_auc"] = 0.0
-        metrics["brier_score"] = math.inf
+        metrics["brier_score"] = 1.0
     return metrics
 
 
 def summarize_fold_metrics(rows: list[dict[str, float]]) -> dict[str, dict[str, float]]:
     keys = sorted(rows[0])
-    return {
-        key: {
-            "mean": float(np.mean([row[key] for row in rows])),
-            "std": float(np.std([row[key] for row in rows], ddof=0)),
+    summary: dict[str, dict[str, float]] = {}
+    for key in keys:
+        values = np.asarray([row[key] for row in rows], dtype=np.float64)
+        values = np.nan_to_num(values, nan=0.0, posinf=1.0, neginf=0.0)
+        summary[key] = {
+            "mean": float(np.mean(values)),
+            "std": float(np.std(values, ddof=0)),
         }
-        for key in keys
-    }
+    return summary
 
 
 def safe_roc_auc(
@@ -1675,7 +1849,7 @@ def multiclass_brier_score(
         try:
             return float(brier_score_loss(y_true, probabilities[:, positive_index]))
         except ValueError:
-            return math.inf
+            return 1.0
     y_binary = label_binarize(y_true, classes=class_labels)
     if y_binary.shape[1] == 1:
         y_binary = np.column_stack([1 - y_binary[:, 0], y_binary[:, 0]])
@@ -1757,6 +1931,7 @@ def evaluate_holdout_model(
     class_labels: list[int],
     threshold: float | None,
     output_dir: Path,
+    split_name: str = "test",
 ) -> dict[str, Any]:
     probabilities = predict_proba_aligned(model, x_test, class_labels)
     predictions = predictions_from_probabilities(
@@ -1768,6 +1943,7 @@ def evaluate_holdout_model(
         class_labels,
     )
     metrics = compute_metrics(y_test, predictions, probabilities, problem_type, class_labels)
+    metrics["split"] = split_name
     matrix = confusion_matrix(y_test, predictions, labels=class_labels)
     metrics["confusion_matrix"] = matrix.astype(int).tolist()
     metrics["classification_report"] = classification_report(
@@ -1777,17 +1953,18 @@ def evaluate_holdout_model(
         zero_division=0,
         output_dict=True,
     )
-    save_confusion_matrix(matrix, class_labels, output_dir / "confusion_matrix.csv")
+    prefix = "" if split_name == "test" else f"{safe_name(split_name)}_"
+    save_confusion_matrix(matrix, class_labels, output_dir / f"{prefix}confusion_matrix.csv")
     save_misclassified_cases(
         sample_indices,
         y_test,
         predictions,
         probabilities,
         class_labels,
-        output_dir / "misclassified_cases.csv",
+        output_dir / f"{prefix}misclassified_cases.csv",
     )
     confusion_summary = build_confusion_summary(matrix, class_labels)
-    save_json(output_dir / "confusion_summary.json", confusion_summary)
+    save_json(output_dir / f"{prefix}confusion_summary.json", confusion_summary)
     metrics["confusion_summary"] = confusion_summary
     return metrics
 
@@ -1926,7 +2103,7 @@ def build_interpretability_artifacts(
 def transformed_matrix_and_classifier(
     model: BaseEstimator,
     x_values: np.ndarray,
-) -> tuple[np.ndarray, list[str], BaseEstimator]:
+) -> tuple[Any, list[str], BaseEstimator]:
     if not hasattr(model, "steps"):
         return x_values, list(config.FEATURE_NAMES), model
 
@@ -1939,7 +2116,7 @@ def transformed_matrix_and_classifier(
         values = step.transform(values)
         if hasattr(step, "get_feature_names_out"):
             names = [str(name) for name in step.get_feature_names_out(names)]
-    return np.asarray(values, dtype=np.float64), names, classifier
+    return values, names, classifier
 
 
 def build_shap_explainer(classifier: BaseEstimator, x_background: np.ndarray) -> Any | None:
@@ -2253,6 +2430,8 @@ def deterministic_sample(values: np.ndarray, max_rows: int) -> np.ndarray:
         return values
     rng = np.random.default_rng(RANDOM_STATE)
     indices = np.sort(rng.choice(values.shape[0], size=max_rows, replace=False))
+    if isinstance(values, pd.DataFrame):
+        return values.iloc[indices].reset_index(drop=True)
     return values[indices]
 
 
@@ -2298,9 +2477,24 @@ def parse_args() -> argparse.Namespace:
         "--binary-referable",
         action="store_true",
         help=(
-            "Collapse multiclass DR stages into binary screening labels: "
-            "stages 0-1 -> Non-Referable (0), stages 2-4 -> Referable (1)."
+            "Collapse multiclass DR grades into binary screening labels: "
+            "grades 0-1 -> Non-Referable (0), grades 2-4 -> Referable (1)."
         ),
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Reuse already completed Optuna trial CSVs from the results directory.",
+    )
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Allow a short validation run with fewer than 50 Optuna trials.",
+    )
+    parser.add_argument(
+        "--skip-interpretability",
+        action="store_true",
+        help="Skip slow SHAP/permutation artifacts while still exporting the model and metrics.",
     )
     return parser.parse_args()
 
@@ -2316,4 +2510,7 @@ if __name__ == "__main__":
         results_dir=results_dir,
         n_trials=args.trials,
         binary_referable=args.binary_referable,
+        resume_completed=args.resume,
+        smoke=args.smoke,
+        skip_interpretability=args.skip_interpretability,
     )

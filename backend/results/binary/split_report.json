@@ -1,0 +1,91 @@
+{
+  "random_state": 42,
+  "test_size": 0.2,
+  "validation_size_of_train_validation": 0.2,
+  "train_count": 10212,
+  "validation_count": 2554,
+  "test_count": 3192,
+  "train_class_counts": {
+    "0": 5719,
+    "1": 4493
+  },
+  "validation_class_counts": {
+    "0": 1430,
+    "1": 1124
+  },
+  "test_class_counts": {
+    "0": 1788,
+    "1": 1404
+  },
+  "train_indices_preview": [
+    10411,
+    1799,
+    261,
+    4266,
+    14755,
+    12174,
+    5463,
+    6077,
+    15040,
+    3356,
+    15417,
+    7107,
+    4627,
+    829,
+    1739,
+    13206,
+    4097,
+    1200,
+    11349,
+    5316
+  ],
+  "validation_indices_preview": [
+    514,
+    6399,
+    7116,
+    14308,
+    10086,
+    13015,
+    5917,
+    14114,
+    13091,
+    10364,
+    15867,
+    10966,
+    382,
+    12263,
+    14631,
+    11154,
+    9139,
+    13017,
+    4443,
+    3950
+  ],
+  "test_indices_preview": [
+    7543,
+    11906,
+    10162,
+    1165,
+    15813,
+    6367,
+    7103,
+    4287,
+    6180,
+    2872,
+    14807,
+    14630,
+    11939,
+    7000,
+    4302,
+    3878,
+    345,
+    9043,
+    13886,
+    12817
+  ],
+  "leakage_check": {
+    "train_validation_overlap": false,
+    "train_test_overlap": false,
+    "validation_test_overlap": false
+  }
+}

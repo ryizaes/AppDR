@@ -1,0 +1,68 @@
+{
+  "selection_basis": "highest ROC-AUC, then lowest Brier score, using training CV",
+  "top_calibration": {
+    "base_model": "LightGBM",
+    "method": "sigmoid",
+    "status": "completed",
+    "roc_auc_mean": 0.9170440059936753,
+    "brier_score_mean": 0.11703750983926545,
+    "f1_mean": 0.8188051996059373,
+    "recall_mean": 0.8384166024610369
+  },
+  "calibration_candidates": [
+    {
+      "base_model": "SVM RBF",
+      "method": "sigmoid",
+      "status": "completed",
+      "roc_auc_mean": 0.9085689045828556,
+      "brier_score_mean": 0.11935460613135498,
+      "f1_mean": 0.8223081512725774,
+      "recall_mean": 0.8626756777513247
+    },
+    {
+      "base_model": "SVM RBF",
+      "method": "isotonic",
+      "status": "completed",
+      "roc_auc_mean": 0.908414321567205,
+      "brier_score_mean": 0.11948857407028739,
+      "f1_mean": 0.8227863760856474,
+      "recall_mean": 0.865569761997369
+    },
+    {
+      "base_model": "Stacking Ensemble",
+      "method": "sigmoid",
+      "status": "completed",
+      "roc_auc_mean": 0.9167313256560445,
+      "brier_score_mean": 0.11534206632681061,
+      "f1_mean": 0.822462064441314,
+      "recall_mean": 0.8404205613264925
+    },
+    {
+      "base_model": "Stacking Ensemble",
+      "method": "isotonic",
+      "status": "completed",
+      "roc_auc_mean": 0.9163133132453248,
+      "brier_score_mean": 0.11516616181350366,
+      "f1_mean": 0.8237460540799969,
+      "recall_mean": 0.8557766486395426
+    },
+    {
+      "base_model": "LightGBM",
+      "method": "sigmoid",
+      "status": "completed",
+      "roc_auc_mean": 0.9170440059936753,
+      "brier_score_mean": 0.11703750983926545,
+      "f1_mean": 0.8188051996059373,
+      "recall_mean": 0.8384166024610369
+    },
+    {
+      "base_model": "LightGBM",
+      "method": "isotonic",
+      "status": "completed",
+      "roc_auc_mean": 0.9167524985599727,
+      "brier_score_mean": 0.11617526378874683,
+      "f1_mean": 0.8180450147388931,
+      "recall_mean": 0.8491005844157453
+    }
+  ]
+}

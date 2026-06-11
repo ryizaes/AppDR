@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
 import config
@@ -128,6 +129,34 @@ class FeatureNameSelector(BaseEstimator, TransformerMixin):
         if selected is None:
             selected = self.available_feature_names or config.FEATURE_NAMES
         return np.asarray(list(selected), dtype=object)
+
+
+class FeatureNameFrame(BaseEstimator, TransformerMixin):
+    """Emit a DataFrame with stable names for estimators that track columns."""
+
+    def __init__(self, feature_names: list[str] | None = None) -> None:
+        self.feature_names = feature_names
+
+    def fit(self, X: Any, y: Any = None) -> "FeatureNameFrame":
+        self.feature_names_ = list(self.feature_names or config.FEATURE_NAMES)
+        return self
+
+    def transform(self, X: Any) -> pd.DataFrame:
+        values = np.asarray(X, dtype=np.float64)
+        if values.ndim != 2:
+            raise ValueError("Feature matrix must be two-dimensional.")
+        feature_names = list(getattr(self, "feature_names_", self.feature_names or []))
+        if values.shape[1] != len(feature_names):
+            raise ValueError(
+                f"Expected {len(feature_names)} named features, got {values.shape[1]}."
+            )
+        return pd.DataFrame(values, columns=feature_names)
+
+    def get_feature_names_out(self, input_features: Any = None) -> np.ndarray:
+        return np.asarray(
+            list(getattr(self, "feature_names_", self.feature_names or config.FEATURE_NAMES)),
+            dtype=object,
+        )
 
 
 def build_clinical_engineered_features(

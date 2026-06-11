@@ -1,0 +1,8 @@
+section,class,label,test_images,correct_predictions,precision_percent,recall_percent,f1_percent,common_misclassification
+multiclass,0,No apparent diabetic retinopathy,1593,1298,85.11,81.48,83.26,"{""predicted_class"": 2, ""predicted_label"": ""Moderate non-proliferative diabetic retinopathy"", ""count"": 202}"
+multiclass,1,Mild non-proliferative diabetic retinopathy,194,64,25.91,32.99,29.02,"{""predicted_class"": 2, ""predicted_label"": ""Moderate non-proliferative diabetic retinopathy"", ""count"": 71}"
+multiclass,2,Moderate non-proliferative diabetic retinopathy,1082,635,64.08,58.69,61.26,"{""predicted_class"": 0, ""predicted_label"": ""No apparent diabetic retinopathy"", ""count"": 167}"
+multiclass,3,Severe non-proliferative diabetic retinopathy,84,26,27.08,30.95,28.89,"{""predicted_class"": 4, ""predicted_label"": ""Proliferative diabetic retinopathy"", ""count"": 30}"
+multiclass,4,Proliferative diabetic retinopathy,239,147,44.14,61.51,51.4,"{""predicted_class"": 2, ""predicted_label"": ""Moderate non-proliferative diabetic retinopathy"", ""count"": 63}"
+binary_referable,0,Non-referable DR,1788,1216,93.25,68.01,78.65,"{""predicted_class"": 1, ""predicted_label"": ""Referable DR"", ""count"": 572}"
+binary_referable,1,Referable DR,1404,1316,69.7,93.73,79.95,"{""predicted_class"": 0, ""predicted_label"": ""Non-referable DR"", ""count"": 88}"

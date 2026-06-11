@@ -139,8 +139,8 @@ def plot_confusion_matrix(matrix: np.ndarray, output_path: Path) -> None:
         ax=axis,
     )
     axis.set_title("Confusion Matrix")
-    axis.set_xlabel("Predicted DR Stage")
-    axis.set_ylabel("True DR Stage")
+    axis.set_xlabel("Predicted DR grade")
+    axis.set_ylabel("True DR grade")
     figure.tight_layout()
     figure.savefig(output_path, dpi=180)
     plt.close(figure)
@@ -168,7 +168,7 @@ def plot_roc_curves(
         fpr, tpr, _ = roc_curve(truth, probabilities[:, class_index])
         class_auc = roc_auc_score(truth, probabilities[:, class_index])
         auc_scores[str(class_label)] = float(class_auc)
-        axis.plot(fpr, tpr, linewidth=2, label=f"Stage {class_label} AUC={class_auc:.3f}")
+        axis.plot(fpr, tpr, linewidth=2, label=f"Class {class_label} AUC={class_auc:.3f}")
 
     if not auc_scores:
         plt.close(figure)
@@ -232,7 +232,7 @@ def explain_feature_importance(rows: list[dict[str, float | str]]) -> str:
     lines.append(
         "Higher-ranked features contributed more to reducing impurity across the forest. "
         "In this thesis pipeline, these rankings show which lesion, vessel, or texture "
-        "measurements most influenced the supervised stage classifier.",
+        "measurements most influenced the supervised DR-grade classifier.",
     )
     return "\n".join(lines)
 

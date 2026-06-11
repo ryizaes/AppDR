@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -149,6 +149,9 @@ type ScreeningResult = {
   dr_probability: number;
   stage: number | null;
   stage_label: string;
+  medical_label?: string;
+  explanation?: string;
+  recommendation?: string;
   reason: string;
   disclaimer: string;
   model_type?: string;
@@ -174,6 +177,30 @@ type AnalysisHistoryEntry = {
 
 type AnalyzeResponse = {
   filename: string;
+  predicted_class?: number | null;
+  medical_label?: string;
+  confidence?: number | null;
+  explanation?: string;
+  recommendation?: string;
+  image_quality_status?:
+    | string
+    | {
+        overall?: string;
+        blur?: string;
+        brightness?: string;
+        warnings?: string[];
+        retake_recommendations?: string[];
+        quality_score?: number;
+        quality_label?: string;
+      };
+  detected_features?:
+    | string[]
+    | {
+        findings?: string[];
+        feature_count?: number;
+        expanded_feature_count?: number;
+        summary?: Record<string, number>;
+      };
   quality: QualityReport;
   features: FeatureReport;
   result: ScreeningResult;
@@ -216,11 +243,11 @@ const STATUS_TIMEOUT_MS = 180000;
 const ANALYSIS_CROP_SCALE = 1;
 const STAGE_OPTIONS = [0, 1, 2, 3, 4];
 const STAGE_PROBABILITY_ORDER = [
-  'No DR',
-  'Mild NPDR',
-  'Moderate NPDR',
-  'Severe NPDR',
-  'Proliferative DR',
+  'No apparent diabetic retinopathy',
+  'Mild non-proliferative diabetic retinopathy',
+  'Moderate non-proliferative diabetic retinopathy',
+  'Severe non-proliferative diabetic retinopathy',
+  'Proliferative diabetic retinopathy',
 ];
 
 const isLoopbackHost = (hostname: string): boolean =>
@@ -291,8 +318,39 @@ const getFileName = (path: string): string => path.split('/').pop() ?? 'image';
 const formatNumber = (value: number, decimals = 1): string =>
   Number.isFinite(value) ? value.toFixed(decimals) : '0.0';
 
-const formatStageValue = (stage: number | null): string =>
-  stage === null ? 'N/A' : stage === 0 ? '0 No DR' : `Stage ${stage}`;
+const CLASS_LABELS: Record<number, string> = {
+  0: 'No apparent diabetic retinopathy',
+  1: 'Mild non-proliferative diabetic retinopathy',
+  2: 'Moderate non-proliferative diabetic retinopathy',
+  3: 'Severe non-proliferative diabetic retinopathy',
+  4: 'Proliferative diabetic retinopathy',
+};
+
+const formatClassValue = (stage: number | null): string =>
+  stage === null ? 'Not classifiable' : CLASS_LABELS[stage] ?? `DR grade ${stage}`;
+
+const getMedicalLabel = (analysis: AnalyzeResponse): string =>
+  analysis.medical_label ||
+  analysis.result.medical_label ||
+  analysis.result.stage_label ||
+  formatClassValue(analysis.result.stage);
+
+const getConfidencePercent = (analysis: AnalyzeResponse): number | null => {
+  const raw = analysis.confidence ?? analysis.result.confidence;
+  return raw === null || raw === undefined ? null : raw * 100;
+};
+
+const getPlainExplanation = (analysis: AnalyzeResponse): string =>
+  analysis.explanation ||
+  analysis.result.explanation ||
+  analysis.result.reason ||
+  'The system analyzed retinal image quality, lesion features, and handcrafted measurements.';
+
+const getRecommendation = (analysis: AnalyzeResponse): string =>
+  analysis.recommendation ||
+  analysis.result.recommendation ||
+  analysis.result.screening_recommendation ||
+  getScreeningStatus(analysis).recommendation;
 
 const formatCheckedAt = (): string =>
   new Date().toLocaleTimeString([], {
@@ -319,6 +377,7 @@ const isNetworkRequestError = (error: unknown): boolean =>
 
 const getAnalyzeErrorMessage = (error: unknown): string => {
   const message = getErrorMessage(error);
+  const lower = message.toLowerCase();
 
   if (isNetworkRequestError(error)) {
     return `Cannot reach the analysis backend. Tried ${API_BASE_URLS.join(
@@ -326,7 +385,15 @@ const getAnalyzeErrorMessage = (error: unknown): string => {
     )}. Keep FastAPI running on port 8000. For USB testing, keep the phone plugged in and keep the port bridge active.`;
   }
 
-  return message;
+  if (
+    lower.includes('readable image') ||
+    lower.includes('upload') ||
+    lower.includes('image processing failed')
+  ) {
+    return 'The image could not be analyzed. Please retake it in better focus and lighting, then try again.';
+  }
+
+  return 'Analysis could not be completed. Please retake the image or try again.';
 };
 
 const fetchWithTimeout = async (
@@ -386,7 +453,7 @@ const getScreeningStatus = (analysis: AnalyzeResponse): ScreeningTier => {
   return {
     status: analysis.result.referable ? 'Referable' : 'Non-Referable',
     referable: analysis.result.referable,
-    rule: 'Fallback screening mapping from the returned stage.',
+    rule: 'Fallback screening mapping from the returned DR grade.',
     recommendation: analysis.result.referable
       ? 'Referable diabetic retinopathy detected. Specialist evaluation recommended.'
       : 'No significant referable diabetic retinopathy findings detected. Routine ophthalmology follow-up recommended after clinician review.',
@@ -411,7 +478,7 @@ const isRuleBasedResult = (result: ScreeningResult): boolean =>
 const getModelTypeLabel = (modelType?: string): string => {
   switch (modelType) {
     case 'dual_tier_handcrafted_features':
-      return 'Dual-tier ML (XGBoost staging + Stacking Ensemble screening)';
+      return 'Dual-tier ML screening';
     case 'rule_based':
       return 'Rule-based fallback';
     default:
@@ -433,12 +500,12 @@ const getBackendModelSummary = (models?: BackendModelStatus): string | null => {
   }
 
   if (models.dual_tier_ready) {
-    return `ML models loaded (${models.multiclass_model ?? 'staging'} + ${models.binary_model ?? 'screening'}).`;
+    return `ML models loaded (${models.multiclass_model ?? 'grading'} + ${models.binary_model ?? 'screening'}).`;
   }
 
   if (models.multiclass_loaded || models.binary_loaded) {
     const loaded = [
-      models.multiclass_loaded ? models.multiclass_model ?? 'staging model' : null,
+      models.multiclass_loaded ? models.multiclass_model ?? 'grading model' : null,
       models.binary_loaded ? models.binary_model ?? 'screening model' : null,
     ].filter(Boolean);
 
@@ -1095,9 +1162,9 @@ export default function App(): React.JSX.Element {
       <View style={styles.noticePanel}>
         <Text style={styles.noticeTitle}>Screening support only</Text>
         <Text style={styles.noticeText}>
-          Stage estimates can under-call advanced disease. A qualified eye-care
-          professional must review the image, overlay, and manual stage before
-          any clinical decision is made.
+          Screening classifications can under-call advanced disease. A qualified
+          eye-care professional must review the image, overlay, and manual grade
+          before any clinical decision is made.
         </Text>
       </View>
     </ScrollView>
@@ -1221,7 +1288,7 @@ export default function App(): React.JSX.Element {
     const systemStage = analysis.result.stage;
     const selectedStage = manualStage ?? systemStage;
     const finalStageLabel =
-      selectedStage === null ? 'Unstageable' : `Stage ${selectedStage}`;
+      selectedStage === null ? 'Not classifiable' : formatClassValue(selectedStage);
     const auditText = overrideConfirmed
       ? `Clinician review recorded locally: ${finalStageLabel}.`
       : 'Awaiting clinician review.';
@@ -1230,9 +1297,9 @@ export default function App(): React.JSX.Element {
       <View style={styles.overridePanel}>
         <Text style={styles.sectionTitle}>Specialist manual review</Text>
         <View style={styles.overrideSummary}>
-          <Text style={styles.overrideLabel}>System stage estimate</Text>
+          <Text style={styles.overrideLabel}>System classification</Text>
           <Text style={styles.overrideValue}>
-            {systemStage === null ? 'Unstageable' : `Stage ${systemStage}`}
+            {systemStage === null ? 'Not classifiable' : formatClassValue(systemStage)}
           </Text>
         </View>
         <View style={styles.stageSelector}>
@@ -1279,7 +1346,7 @@ export default function App(): React.JSX.Element {
             onPress={() => setOverrideConfirmed(true)}
             activeOpacity={0.75}
           >
-            <Text style={styles.secondaryButtonText}>Save Manual Stage</Text>
+            <Text style={styles.secondaryButtonText}>Save Manual Grade</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.auditText}>{auditText}</Text>
@@ -1332,7 +1399,7 @@ export default function App(): React.JSX.Element {
               finding.detected ? styles.findingDetected : styles.findingAbsent,
             ]}
           >
-            {finding.detected ? '✓' : '✗'}
+            {finding.detected ? 'Yes' : 'No'}
           </Text>
           <Text style={styles.findingText}>{finding.label}</Text>
         </View>
@@ -1344,8 +1411,7 @@ export default function App(): React.JSX.Element {
     <View style={styles.summaryPanel}>
       <Text style={styles.sectionTitle}>Screening Recommendation</Text>
       <Text style={styles.recommendationText}>
-        {analysis.result.screening_recommendation ||
-          getScreeningStatus(analysis).recommendation}
+        {getRecommendation(analysis)}
       </Text>
       <Text style={styles.reviewDisclaimer}>{analysis.result.disclaimer}</Text>
     </View>
@@ -1424,7 +1490,7 @@ export default function App(): React.JSX.Element {
         )}
         {stageEntries.length > 0 && (
           <>
-            <Text style={styles.probabilityGroupTitle}>DR stage estimate</Text>
+            <Text style={styles.probabilityGroupTitle}>DR classification probabilities</Text>
             {stageEntries.map(entry =>
               renderProbabilityRow(entry.label, entry.value),
             )}
@@ -1477,35 +1543,39 @@ export default function App(): React.JSX.Element {
             ]}
           >
             <Text style={styles.resultLabel}>
-              {isAnalyzing ? 'Analysis running' : 'Screening status'}
+              {isAnalyzing ? 'Analysis running' : 'Screening result'}
             </Text>
             <Text style={styles.resultTitle}>
               {isAnalyzing
                 ? 'Automated analysis in progress'
                 : selectedImage.analysis
-                  ? getScreeningStatus(selectedImage.analysis).status
+                  ? getMedicalLabel(selectedImage.analysis)
                   : 'Ready to analyze'}
             </Text>
             <Text style={styles.resultText}>
               {isAnalyzing
                 ? 'The system is checking image quality, enhancing the retinal image, segmenting vessels, detecting lesions, extracting classical features, and preparing a screening-support result.'
                 : selectedImage.analysis
-                  ? `${getScreeningStatus(selectedImage.analysis).recommendation} ${selectedImage.analysis.result.reason}`
+                  ? getPlainExplanation(selectedImage.analysis)
                   : 'Capture or upload an image to begin automated screening support.'}
             </Text>
             {selectedImage.analysis && (
               <View style={styles.resultSummaryRow}>
                 <View style={styles.stageBadge}>
-                  <Text style={styles.stageBadgeLabel}>Stage</Text>
+                  <Text style={styles.stageBadgeLabel}>DR grade</Text>
                   <Text style={styles.stageBadgeValue}>
                     {selectedImage.analysis.result.stage ?? 'N/A'}
                   </Text>
                 </View>
                 <Text style={styles.resultProbability}>
-                  {getConfidenceLabel(selectedImage.analysis)}
+                  Confidence{' '}
+                  {getConfidencePercent(selectedImage.analysis) === null
+                    ? getConfidenceLabel(selectedImage.analysis)
+                    : formatPercent(getConfidencePercent(selectedImage.analysis) ?? 0)}
                   {'\n'}
                   Referable risk {formatPercent(selectedImage.analysis.result.dr_probability)}
-                  {'\n'}Clinician review required
+                  {'\n'}
+                  {getRecommendation(selectedImage.analysis)}
                 </Text>
               </View>
             )}
@@ -1613,10 +1683,10 @@ export default function App(): React.JSX.Element {
               </Text>
             </View>
             <View style={styles.metricBox}>
-              <Text style={styles.metricLabel}>Stage estimate</Text>
+              <Text style={styles.metricLabel}>Classification</Text>
               <Text style={styles.metricValue}>
                 {selectedImage.analysis?.quality.is_acceptable
-                  ? formatStageValue(selectedImage.analysis.result.stage)
+                  ? getMedicalLabel(selectedImage.analysis)
                   : selectedImage.analysis
                     ? 'N/A'
                     : 'Waiting'}
@@ -1725,15 +1795,15 @@ export default function App(): React.JSX.Element {
         <Text style={styles.readingTitle}>Dual-Tier ML Screening</Text>
         <Text style={styles.readingText}>
           After classical image processing extracts 203 retinal measurements, a
-          trained XGBoost model estimates DR stage (0–4) and a Stacking Ensemble
-          screens referable cases. Both models were trained on 3,564 labeled
-          images. Output is decision support only, not a diagnosis.
+          trained ML model estimates the diabetic retinopathy grade and a
+          binary model screens for referable disease. Output is decision support
+          only, not a diagnosis.
         </Text>
         <Text style={styles.readingTitle}>Classical Processing Layer</Text>
         <Text style={styles.readingText}>
           Enhancement, vessel segmentation, lesion detection, and handcrafted
           feature extraction feed the supervised models. When models are
-          unavailable, the app falls back to rule-based staging.
+          unavailable, the app falls back to rule-based screening support.
         </Text>
       </View>
     </ScrollView>
@@ -2297,8 +2367,9 @@ const styles = StyleSheet.create({
   },
   resultTitle: {
     color: '#12323A',
-    fontSize: 21,
+    fontSize: 20,
     fontWeight: '800',
+    lineHeight: 25,
     marginTop: 6,
   },
   resultText: {
@@ -2481,7 +2552,7 @@ const styles = StyleSheet.create({
   metricBox: {
     flexGrow: 1,
     width: '48%',
-    minHeight: 76,
+    minHeight: 86,
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
     borderColor: '#D8E8E4',
@@ -2497,8 +2568,9 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: '#12323A',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
+    lineHeight: 19,
   },
   actionRow: {
     flexDirection: 'row',

@@ -20,7 +20,7 @@ def predict_stage(
     image_path: str | Path,
     model_path: str | Path = config.BEST_MODEL_PATH,
 ) -> dict[str, Any]:
-    """Predict DR stage from one fundus image using the saved ML pipeline."""
+    """Predict the encoded DR grade from one fundus image using the saved ML pipeline."""
     model = load_model(model_path)
     feature_names = load_model_feature_names()
     feature_dict = extract_feature_dict(image_path)
@@ -70,8 +70,8 @@ def predict_from_feature_dict(
         confidence = 1.0
 
     return {
-        "predicted_stage": prediction,
-        "stage_name": config.CLASS_NAMES.get(prediction, "Unknown"),
+        "predicted_class": prediction,
+        "medical_label": config.CLASS_NAMES.get(prediction, "Unknown"),
         "confidence": confidence,
         "probabilities": probabilities,
         "feature_vector": {
@@ -163,8 +163,8 @@ def append_prediction_or_failure(
     row: dict[str, Any] = {
         "_row_order": payload["row_order"],
         config.APTOS_IMAGE_ID_COLUMN: payload["image_id"],
-        "predicted_stage": result["predicted_stage"],
-        "stage_name": result["stage_name"],
+        "predicted_class": result["predicted_class"],
+        "medical_label": result["medical_label"],
         "confidence": result["confidence"],
     }
     for label in config.CLASS_LABELS:
@@ -200,7 +200,7 @@ def model_classes(model: Any) -> list[int]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Predict DR stage for one image or an APTOS-style test CSV.")
+    parser = argparse.ArgumentParser(description="Predict DR grade for one image or an APTOS-style test CSV.")
     parser.add_argument("image_path", type=Path, nargs="?")
     parser.add_argument("--model-path", type=Path, default=config.BEST_MODEL_PATH)
     parser.add_argument("--csv", type=Path, default=None, help="Unlabeled CSV, e.g. Downloads/test.csv")

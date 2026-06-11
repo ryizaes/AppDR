@@ -1,6 +1,5 @@
 import base64
 import os
-import traceback
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from typing import Any
@@ -82,7 +81,7 @@ def get_task_status(task_id: str) -> dict[str, Any] | None:
             "state": "FAILURE",
             "message": "Analysis failed.",
             "result": None,
-            "error": str(async_result.result),
+            "error": user_safe_analysis_error(Exception(str(async_result.result))),
         }
 
     return pending_status(task_id, f"Task state: {state}.")
@@ -119,7 +118,7 @@ def run_local_analysis(
             state="FAILURE",
             message="Analysis failed.",
             result=None,
-            error=f"{error}\n{traceback.format_exc(limit=3)}",
+            error=user_safe_analysis_error(error),
         )
 
 
@@ -138,3 +137,15 @@ def pending_status(task_id: str, message: str) -> dict[str, Any]:
         "result": None,
         "error": None,
     }
+
+
+def user_safe_analysis_error(error: Exception) -> str:
+    message = str(error).strip()
+    if not message:
+        return "Analysis failed. Please retake the image and try again."
+    lower = message.lower()
+    if "readable image" in lower or "cannot identify image" in lower:
+        return "The uploaded file could not be read as an image."
+    if "203-feature" in lower or "feature extraction" in lower:
+        return "The image could not be processed by the screening model. Please retake the image and try again."
+    return "Analysis failed. Please retake the image and try again."

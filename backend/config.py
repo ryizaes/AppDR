@@ -22,11 +22,37 @@ DEFAULT_WORKERS = max(1, min(4, (os.cpu_count() or 2) - 1))
 
 CLASS_LABELS = [0, 1, 2, 3, 4]
 CLASS_NAMES = {
-    0: "No DR",
-    1: "Mild NPDR",
-    2: "Moderate NPDR",
-    3: "Severe NPDR",
-    4: "Proliferative DR",
+    0: "No apparent diabetic retinopathy",
+    1: "Mild non-proliferative diabetic retinopathy",
+    2: "Moderate non-proliferative diabetic retinopathy",
+    3: "Severe non-proliferative diabetic retinopathy",
+    4: "Proliferative diabetic retinopathy",
+}
+
+# The dataset uses five DR grades encoded as 0-4. These labels keep the model's
+# exact class mapping while avoiding vague UI wording such as "Stage 1".
+CLASS_EXPLANATIONS = {
+    0: (
+        "The model did not find apparent diabetic-retinopathy features in the "
+        "extracted retinal measurements."
+    ),
+    1: (
+        "The model found findings compatible with mild non-proliferative "
+        "diabetic retinopathy. This is still a screening result and needs "
+        "professional review."
+    ),
+    2: (
+        "The model found findings compatible with moderate non-proliferative "
+        "diabetic retinopathy. This is treated as referable screening support."
+    ),
+    3: (
+        "The model found findings compatible with severe non-proliferative "
+        "diabetic retinopathy. Prompt ophthalmology review is recommended."
+    ),
+    4: (
+        "The model found findings compatible with proliferative diabetic "
+        "retinopathy. Prompt ophthalmology review is recommended."
+    ),
 }
 
 STAGE_FOLDERS = {

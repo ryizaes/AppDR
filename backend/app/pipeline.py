@@ -114,13 +114,7 @@ BINARY_REFERABLE_THRESHOLD_PATH = (
 )
 DEFAULT_BINARY_REFERABLE_THRESHOLD = 0.20
 ML_FEATURE_NAMES = ml_config.FEATURE_NAMES
-ML_STAGE_LABELS = {
-    0: "Stage 0: No DR",
-    1: "Stage 1: Mild NPDR",
-    2: "Stage 2: Moderate NPDR",
-    3: "Stage 3: Severe NPDR",
-    4: "Stage 4: Proliferative DR",
-}
+ML_STAGE_LABELS = dict(ml_config.CLASS_NAMES)
 SPATIAL_GRID_SIZE = 4
 SPATIAL_FEATURE_KINDS = (
     "mask_coverage",
@@ -247,6 +241,21 @@ def process_image_path(image_path: str | Path) -> dict[str, Any]:
 
 
 def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResponse:
+    detected_finding_labels = [
+        finding.label for finding in output.detected_findings if finding.detected
+    ]
+    detected_features = {
+        "findings": detected_finding_labels,
+        "feature_count": len(ML_FEATURE_NAMES),
+        "expanded_feature_count": len(output.features.expanded_features or {}),
+        "summary": {
+            "microaneurysm_count": output.features.microaneurysm_count,
+            "exudate_count": output.features.exudate_count,
+            "exudate_area": output.features.exudate_area,
+            "vessel_density": output.features.vessel_density,
+            "pathology_area_index": output.features.pathology_area_index,
+        },
+    }
     history_entry = AnalysisHistoryEntry(
         image_id=output.image_id,
         date_analyzed=datetime.now(timezone.utc).isoformat(),
@@ -257,6 +266,14 @@ def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResp
 
     return AnalyzeResponse(
         filename=filename or "uploaded-image",
+        predicted_class=output.result.stage,
+        medical_label=output.result.medical_label or output.result.stage_label,
+        confidence=output.result.confidence,
+        explanation=output.result.explanation or output.result.reason,
+        recommendation=output.result.recommendation
+        or output.result.screening_recommendation,
+        image_quality_status=build_image_quality_status(output.quality),
+        detected_features=detected_features,
         quality=output.quality,
         features=output.features,
         result=output.result,
@@ -266,6 +283,33 @@ def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResp
         lesion_regions=output.lesion_regions,
         image_shape=output.image_shape,
     )
+
+
+def build_image_quality_status(quality: QualityReport) -> dict[str, object]:
+    """Compact mobile-facing quality summary without exposing raw internals."""
+    warnings_text = " ".join(quality.warnings).lower()
+    blur_status = "needs_retake" if "blur" in warnings_text else "acceptable"
+    brightness_status = (
+        "too_dark"
+        if "dark" in warnings_text or "underexposed" in warnings_text
+        else "too_bright"
+        if "bright" in warnings_text or "overexposed" in warnings_text
+        else "acceptable"
+    )
+    overall = (
+        "acceptable"
+        if quality.is_acceptable
+        else "poor"
+    )
+    return {
+        "overall": overall,
+        "blur": blur_status,
+        "brightness": brightness_status,
+        "warnings": quality.warnings,
+        "retake_recommendations": quality.retake_recommendations,
+        "quality_score": quality.quality_score,
+        "quality_label": quality.quality_label,
+    }
 
 
 def fixed_processing_parameters() -> dict[str, float]:
@@ -905,6 +949,12 @@ def stage5_classify(features: FeatureReport, quality: QualityReport) -> Screenin
             dr_probability=0.0,
             stage=None,
             stage_label="Unstageable",
+            medical_label="Image quality insufficient for screening",
+            explanation=(
+                "The retinal image quality was not good enough for reliable "
+                "automated screening."
+            ),
+            recommendation="Please retake the image in better focus and lighting.",
             reason=", ".join(quality.retake_recommendations or quality.warnings),
             disclaimer=(
                 "Screening support only. Retake with a clear retinal image before "
@@ -930,6 +980,9 @@ def stage5_classify(features: FeatureReport, quality: QualityReport) -> Screenin
         dr_probability=score,
         stage=stage,
         stage_label=label,
+        medical_label=label,
+        explanation=medical_explanation_for_stage(stage),
+        recommendation=str(screening["recommendation"]),
         reason=reason,
         disclaimer=(
             "Rule-based classical screening support only. This result is not a "
@@ -954,6 +1007,15 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
         [supervised_feature_vector_from_report(features, feature_names)],
         dtype=np.float64,
     )
+    if len(feature_names) != len(ML_FEATURE_NAMES):
+        raise ValueError(
+            "Loaded model metadata does not match the 203-feature AppDR extractor."
+        )
+    if feature_vector.shape[1] != len(ML_FEATURE_NAMES):
+        raise ValueError(
+            f"Feature extraction produced {feature_vector.shape[1]} features; "
+            f"expected {len(ML_FEATURE_NAMES)}."
+        )
 
     stage: int | None = None
     stage_label = "Unstageable"
@@ -966,7 +1028,7 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
         stage_confidence = (
             max(stage_probabilities.values()) if stage_probabilities else None
         )
-        stage_label = ML_STAGE_LABELS.get(stage, f"Stage {stage}: DR")
+        stage_label = ML_STAGE_LABELS.get(stage, f"Diabetic retinopathy grade {stage}")
 
     referable = bool(screening_tier_for_stage(stage)["referable"])
     dr_probability = supervised_referable_probability(stage, stage_probabilities)
@@ -985,6 +1047,12 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
             max(binary_probabilities.values()) if binary_probabilities else None
         )
         screening = screening_tier_for_binary_referable(referable, binary_threshold)
+        if stage_model is None:
+            stage_label = (
+                "Referable diabetic retinopathy"
+                if referable
+                else "No referable diabetic retinopathy detected"
+            )
 
     feature_summary = (
         f"MA={features.microaneurysm_count}, "
@@ -996,8 +1064,9 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
 
     if stage_model is not None and stage is not None:
         reason_parts.append(
-            f"{supervised_model_display_name()} estimated DR stage {stage} "
-            f"from {len(feature_names)} handcrafted retinal measurements ({feature_summary})."
+            f"{supervised_model_display_name()} classified the image as "
+            f"{stage_label} from {len(feature_names)} handcrafted retinal "
+            f"measurements ({feature_summary})."
         )
         if stage_confidence is not None:
             reason_parts.append(f"Stage confidence is {stage_confidence:.2%}.")
@@ -1018,12 +1087,22 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
         binary_probabilities,
     )
 
+    explanation = (
+        medical_explanation_for_stage(stage)
+        if stage_model is not None
+        else str(screening["recommendation"])
+    )
+    recommendation = str(screening["recommendation"])
+
     return ScreeningResult(
         classification=f"{screening['status']}: {stage_label}",
         referable=referable,
         dr_probability=dr_probability,
         stage=stage,
         stage_label=stage_label,
+        medical_label=stage_label,
+        explanation=explanation,
+        recommendation=recommendation,
         reason=" ".join(reason_parts),
         disclaimer=(
             "Supervised handcrafted-feature screening support only. This result "
@@ -1166,6 +1245,9 @@ def metadata_feature_names(metadata: dict[str, Any]) -> list[str]:
 def supervised_model_feature_names() -> list[str]:
     if _SUPERVISED_MODEL_FEATURE_NAMES:
         return _SUPERVISED_MODEL_FEATURE_NAMES
+    binary_names = metadata_feature_names(_BINARY_SCREENING_MODEL_METADATA)
+    if binary_names:
+        return binary_names
 
     return list(ML_FEATURE_NAMES)
 
@@ -1276,7 +1358,10 @@ def model_classes(model: Any) -> list[int]:
     return [int(label) for label in classes]
 
 
-def supervised_referable_probability(stage: int, probabilities: dict[int, float]) -> float:
+def supervised_referable_probability(
+    stage: int | None,
+    probabilities: dict[int, float],
+) -> float:
     if probabilities:
         referable_probability = sum(
             probability
@@ -1284,6 +1369,9 @@ def supervised_referable_probability(stage: int, probabilities: dict[int, float]
             if int(label) >= 2
         )
         return round(float(np.clip(referable_probability * 100.0, 0.0, 100.0)), 1)
+
+    if stage is None:
+        return 0.0
 
     return fallback_referable_score(stage, 0.0)
 
@@ -1308,17 +1396,17 @@ def screening_tier_for_stage(stage: int | None) -> dict[str, Any]:
         return {
             "status": "Referable",
             "referable": True,
-            "rule": "Stages 2-4 are mapped to referable screening-support review.",
+            "rule": "DR grades 2-4 are mapped to referable screening-support review.",
             "recommendation": (
                 "Referable diabetic retinopathy detected. Specialist evaluation "
-                "recommended."
+                "with an ophthalmologist is recommended."
             ),
         }
 
     return {
         "status": "Non-Referable",
         "referable": False,
-        "rule": "Stages 0-1 are mapped to non-referable screening-support review.",
+        "rule": "DR grades 0-1 are mapped to non-referable screening-support review.",
         "recommendation": (
             "No significant referable diabetic retinopathy findings detected. "
             "Routine ophthalmology follow-up recommended after clinician review."
@@ -1372,27 +1460,39 @@ def classify_by_strict_stage_rules(features: FeatureReport) -> tuple[int, str, s
     if features.vessel_density > 0.12 and features.glcm_contrast > 500.0:
         return (
             4,
-            "Stage 4: Proliferative DR (Referable)",
+            ML_STAGE_LABELS[4],
             "vessel density and GLCM contrast exceeded the proliferative override",
         )
     if ma_count == 0 and exudate_count == 0:
-        return 0, "Stage 0: No DR", "no microaneurysms or exudates detected"
+        return 0, ML_STAGE_LABELS[0], "no microaneurysms or exudates detected"
     if ma_count > 15 or exudate_quadrants >= 2:
         return (
             3,
-            "Stage 3: Severe NPDR",
+            ML_STAGE_LABELS[3],
             "more than 15 microaneurysms or exudates across at least two quadrants",
         )
     if 1 <= ma_count <= 5 and exudate_count == 0:
-        return 1, "Stage 1: Mild NPDR", "1 to 5 microaneurysms and no exudates detected"
+        return 1, ML_STAGE_LABELS[1], "1 to 5 microaneurysms and no exudates detected"
     if 6 <= ma_count <= 15 or (exudate_count > 0 and exudate_quadrants == 1):
         return (
             2,
-            "Stage 2: Moderate NPDR",
+            ML_STAGE_LABELS[2],
             "6 to 15 microaneurysms or exudates localized to one quadrant",
         )
 
-    return 1, "Stage 1: Mild NPDR", "minimal non-zero lesion evidence detected"
+    return 1, ML_STAGE_LABELS[1], "minimal non-zero lesion evidence detected"
+
+
+def medical_explanation_for_stage(stage: int | None) -> str:
+    if stage is None:
+        return (
+            "The image could not be reliably classified. Retake the image and "
+            "ask an eye-care professional to review it."
+        )
+    return ml_config.CLASS_EXPLANATIONS.get(
+        int(stage),
+        "The model produced a diabetic-retinopathy screening classification.",
+    )
 
 
 def deterministic_stage_score(stage: int, pathology_area_index: float) -> float:

@@ -22,11 +22,11 @@ RANDOM_STATE = 42
 TEST_SIZE = 0.20
 BINARY_THRESHOLD = 0.20
 STAGE_NAMES = {
-    0: "No DR",
-    1: "Mild NPDR",
-    2: "Moderate NPDR",
-    3: "Severe NPDR",
-    4: "Proliferative DR",
+    0: "No apparent diabetic retinopathy",
+    1: "Mild non-proliferative diabetic retinopathy",
+    2: "Moderate non-proliferative diabetic retinopathy",
+    3: "Severe non-proliferative diabetic retinopathy",
+    4: "Proliferative diabetic retinopathy",
 }
 
 

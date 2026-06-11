@@ -5,12 +5,19 @@ FastAPI service for the AppDR mobile app.
 The service uses deterministic classical image processing only. It does not load
 a CNN or deep-learning model. A traditional scikit-learn classifier may be loaded
 as an internal tabular decision engine over handcrafted retinal measurements.
-All returned stages are decision-support estimates for clinician review, not
-autonomous diagnoses.
+All returned classifications are decision-support estimates for clinician
+review, not autonomous diagnoses.
 
-The practical dataset basis in this workspace is APTOS 2019 Blindness Detection
-under `images/aptos2019/`. Its labels are `0` no DR, `1` mild, `2` moderate,
-`3` severe, and `4` proliferative DR.
+The current trained artifacts use local Downloads datasets: OIA-DDR/DDR from
+`C:\Users\User\Downloads\DR_grading.csv` and
+`C:\Users\User\Downloads\DR_grading`, plus APTOS train from
+`C:\Users\User\Downloads\train.csv` and
+`C:\Users\User\Downloads\train_images`. APTOS `test.csv` has no diagnosis
+column in this workspace, so it is used only for unlabeled smoke prediction.
+Encoded labels are mapped to: `0` no apparent diabetic retinopathy, `1` mild
+non-proliferative diabetic retinopathy, `2` moderate non-proliferative diabetic
+retinopathy, `3` severe non-proliferative diabetic retinopathy, and `4`
+proliferative diabetic retinopathy.
 
 ## Setup
 
@@ -62,11 +69,12 @@ http://127.0.0.1:8000/docs
 7. Detect microaneurysms with vessel-suppressed black-hat plus circular Hough
    validation, and detect exudates with L*a*b* lightness, Otsu thresholding,
    local bright-lesion gating, and optic-disc exclusion.
-8. Extract 30 handcrafted measurements covering lesion counts/areas, vessel
-   density and tortuosity, L*a*b* b-channel statistics, and multi-angle GLCM
-   texture values.
-9. Reject unsuitable captures before estimating the decision-support stage.
-10. Map stages 0-1 to Non-Referable and stages 2-4 to Referable.
+8. Extract the configured 203 handcrafted measurements covering lesion
+   counts/areas, vessel density and tortuosity, L*a*b* statistics, multi-angle
+   GLCM texture, color, frequency, wavelet, quadrant, and quality-adjusted
+   features.
+9. Reject unsuitable captures before estimating the decision-support DR grade.
+10. Map grades 0-1 to Non-Referable and grades 2-4 to Referable.
 11. Return processed images, lesion overlay masks, scalar features, and lesion
    coordinates for clinical visual verification.
 
@@ -74,24 +82,52 @@ http://127.0.0.1:8000/docs
 
 This backend provides screening support only. It does not provide a medical
 diagnosis or treatment recommendation. Current evaluation shows weaker recall
-for severe and proliferative stages than for no-DR/moderate cases, so every
+for severe and proliferative disease than for no-DR/moderate cases, so every
 result requires qualified eye-care review and the frontend keeps a manual
 override step.
 
 ## Handcrafted-Feature Training
 
-APTOS-style `id_code,diagnosis` CSVs are supported. Build features from the
-Downloads dataset:
+Build the combined OIA-DDR/DDR + APTOS feature table:
 
 ```powershell
-.\.venv\Scripts\python.exe dataset_builder.py --csv C:\Users\User\Downloads\train.csv --images-dir C:\Users\User\Downloads\train_images --workers 4
+.\.venv\Scripts\python.exe scripts\prepare_combined_dataset.py --downloads-dir C:\Users\User\Downloads --output-csv features_combined.csv --workers 4 --resume
 ```
 
 Train traditional classifiers:
 
 ```powershell
-.\.venv\Scripts\python.exe train.py
+.\.venv\Scripts\python.exe scripts\train_all_models.py --features-csv features_combined.csv --trials 50
 ```
+
+The trainer saves the multiclass model under `results/best_model.pkl` and the
+binary referable model under `results/binary/best_model.pkl`. It also saves
+metadata, selected features, scaler/imputer artifacts, metrics, confusion
+matrices, feature importance, and misclassified-case analysis. Use `--resume`
+only when continuing an interrupted run; otherwise retraining starts fresh and
+does not reuse stale Optuna results.
+
+Use this faster finalization command when completed Optuna trials exist and the
+slow SHAP/permutation interpretability step should be skipped:
+
+```powershell
+.\.venv\Scripts\python.exe train.py --features-csv features_combined.csv --results-dir results\binary --trials 50 --binary-referable --resume --skip-interpretability
+```
+
+## Current Dataset And Metrics
+
+- Raw OIA-DDR counts: `0=6266`, `1=630`, `2=4477`, `3=236`, `4=913`.
+- Raw APTOS train counts: `0=1805`, `1=370`, `2=999`, `3=193`, `4=295`.
+- Clean combined table: `features_combined.csv`, `15,958` labeled rows, `203`
+  feature columns.
+- Clean combined counts: `0=7966`, `1=971`, `2=5411`, `3=418`, `4=1192`.
+- Multiclass artifact: XGBoost, test macro F1 `0.5077`, balanced accuracy
+  `0.5312`.
+- Binary referable artifact: SVM RBF, test F1 `0.7995`, recall `0.9373`,
+  balanced accuracy `0.8087`.
+- Severe NPDR/class `3` remains the weakest class with multiclass test recall
+  `0.3095`; the app presents this as screening support and recommends
+  ophthalmologist confirmation.
 
 Run the API:
 

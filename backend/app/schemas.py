@@ -88,6 +88,9 @@ class ScreeningResult(BaseModel):
     dr_probability: float
     stage: int | None = None
     stage_label: str
+    medical_label: str = ""
+    explanation: str = ""
+    recommendation: str = ""
     reason: str
     disclaimer: str
     model_type: str = "rule_based"
@@ -100,6 +103,13 @@ class ScreeningResult(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     filename: str
+    predicted_class: int | None = None
+    medical_label: str = ""
+    confidence: float | None = None
+    explanation: str = ""
+    recommendation: str = ""
+    image_quality_status: dict[str, object] = Field(default_factory=dict)
+    detected_features: dict[str, object] = Field(default_factory=dict)
     quality: QualityReport
     features: FeatureReport
     result: ScreeningResult
