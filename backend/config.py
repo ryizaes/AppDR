@@ -2,13 +2,17 @@ import os
 from pathlib import Path
 
 
-# Central configuration for the supervised handcrafted-feature DR pipeline.
-# The code intentionally avoids TensorFlow, PyTorch, CNNs, and learned image
-# embeddings. Only classical image processing features are passed to ML models.
+# Central configuration for the current production supervised handcrafted-feature
+# DR pipeline. Future study-backed CNN, image-input, or hybrid experiments should
+# use separate artifacts and reports until they pass validation and deployment
+# checks.
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 RESULTS_DIR = BASE_DIR / "results"
+MODEL_MODE = os.getenv("MODEL_MODE", "ophthalmologist_demo_hybrid").strip().lower()
+DEMO_OPHTHALMOLOGIST_DIR = RESULTS_DIR / "demo_ophthalmologist_update"
+DEMO_HYBRID_MODE = "ophthalmologist_demo_hybrid"
 
 FEATURES_CSV = BASE_DIR / "features.csv"
 FAILED_SAMPLES_TXT = BASE_DIR / "failed_samples.txt"
@@ -38,20 +42,25 @@ CLASS_EXPLANATIONS = {
     ),
     1: (
         "The model found findings compatible with mild non-proliferative "
-        "diabetic retinopathy. This is still a screening result and needs "
-        "professional review."
+        "diabetic retinopathy. Mild NPDR is commonly associated with "
+        "microaneurysms only when visible and feature-supported. This is still "
+        "a screening result and needs professional review."
     ),
     2: (
         "The model found findings compatible with moderate non-proliferative "
-        "diabetic retinopathy. This is treated as referable screening support."
+        "diabetic retinopathy. This may involve hemorrhages, exudates, cotton "
+        "wool spots, or other NPDR signs, and is treated as referable screening "
+        "support."
     ),
     3: (
         "The model found findings compatible with severe non-proliferative "
-        "diabetic retinopathy. Prompt ophthalmology review is recommended."
+        "diabetic retinopathy. This may indicate an advanced NPDR pattern; "
+        "ophthalmologist confirmation is required."
     ),
     4: (
         "The model found findings compatible with proliferative diabetic "
-        "retinopathy. Prompt ophthalmology review is recommended."
+        "retinopathy. This is a serious referable DR category; urgent "
+        "ophthalmologist confirmation is recommended."
     ),
 }
 

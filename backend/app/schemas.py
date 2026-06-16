@@ -74,6 +74,75 @@ class DetectionFinding(BaseModel):
     detected: bool
 
 
+class ClinicalBasisItem(BaseModel):
+    grade: int | None = None
+    medical_label: str
+    clinical_reference: str
+    app_mapping: str
+    directly_assessed: bool = True
+
+
+class SessionImageMetadata(BaseModel):
+    eye: str = "unknown"
+    field: str = "unknown"
+    image_source: str = "unknown"
+
+
+class SessionImageResult(BaseModel):
+    filename: str
+    metadata: SessionImageMetadata = Field(default_factory=SessionImageMetadata)
+    analysis: "AnalyzeResponse"
+
+
+class SessionSummary(BaseModel):
+    session_id: str
+    screening_result: str
+    screening_label: str
+    recommendation: str
+    image_count: int
+    poor_quality_count: int
+    strongest_referable_probability: float | None = None
+    strongest_image_filename: str | None = None
+    max_predicted_class: int | None = None
+    max_medical_label: str = ""
+    average_probabilities: dict[str, float] = Field(default_factory=dict)
+    patient_level_training_used: bool = False
+    note: str = (
+        "Session aggregation combines image-level screening outputs only. "
+        "Patient-level model training is future work until true patient/session "
+        "labels and image-angle metadata are available."
+    )
+
+
+class AnalyzeSessionResponse(BaseModel):
+    session: SessionSummary
+    images: list[SessionImageResult]
+    disclaimer: str = (
+        "This app is a screening support tool only and does not provide a final "
+        "medical diagnosis. Please consult an ophthalmologist for confirmation."
+    )
+
+
+class UsabilityTrialFeedback(BaseModel):
+    session_id: str | None = None
+    image_count: int = 0
+    retake_count: int = 0
+    time_to_finish_seconds: float | None = None
+    image_quality_warnings: list[str] = Field(default_factory=list)
+    result_shown: str = ""
+    ease_of_use_rating: int | None = Field(default=None, ge=1, le=5)
+    result_understanding_rating: int | None = Field(default=None, ge=1, le=5)
+    recommendation_clarity_rating: int | None = Field(default=None, ge=1, le=5)
+    confusion_notes: str = ""
+    free_text_feedback: str = ""
+
+
+class UsabilityTrialFeedbackResponse(BaseModel):
+    status: str
+    saved: bool
+    path: str | None = None
+
+
 class AnalysisHistoryEntry(BaseModel):
     image_id: str
     date_analyzed: str
@@ -103,13 +172,40 @@ class ScreeningResult(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     filename: str
+    screening_result: str = "uncertain"
+    screening_label: str = "Uncertain screening result"
+    referable_result: str = "Uncertain screening result"
+    screening_confidence: float | None = None
+    screening_confidence_level: str = "low"
+    referable_probability: float | None = None
+    non_referable_probability: float | None = None
     predicted_class: int | None = None
+    severity_grade: int | None = None
     medical_label: str = ""
+    severity_label_medical: str = ""
+    grade_confidence: float | None = None
     confidence: float | None = None
     explanation: str = ""
     recommendation: str = ""
+    model_type: str = ""
+    model_version: str = "production_handcrafted_203"
+    clinical_basis: list[ClinicalBasisItem] = Field(default_factory=list)
+    detected_supported_findings: list[str] = Field(default_factory=list)
+    not_directly_assessed_findings: list[str] = Field(default_factory=list)
+    disclaimer: str = (
+        "This app is a screening support tool only and does not provide a final "
+        "medical diagnosis. Please consult an ophthalmologist for confirmation."
+    )
     image_quality_status: dict[str, object] = Field(default_factory=dict)
+    image_quality: dict[str, object] = Field(default_factory=dict)
     detected_features: dict[str, object] = Field(default_factory=dict)
+    detected_feature_summary: dict[str, object] = Field(default_factory=dict)
+    clinical_note: str = (
+        "This result is an automated screening support output and is not a final "
+        "diagnosis. Please confirm with an ophthalmologist."
+    )
+    limitations: list[str] = Field(default_factory=list)
+    model_update_summary: dict[str, object] = Field(default_factory=dict)
     quality: QualityReport
     features: FeatureReport
     result: ScreeningResult

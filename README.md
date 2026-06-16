@@ -107,6 +107,147 @@ Live prediction uses the same `feature_extraction.extract_feature_payload`
 feature order saved in metadata, then sends that vector through the saved
 scikit-learn pipeline.
 
+### Weak-Stage Extra Dataset Experiment
+
+Three additional Downloads datasets were inspected without extracting them into
+the project folder:
+
+- `C:\Users\User\Downloads\archive.zip`: Diabetic Retinopathy Dataset by Sachin Kumar
+- `C:\Users\User\Downloads\Imagenes.zip` plus `C:\Users\User\Downloads\idrid_labels.csv`: IDRiD grading
+- `C:\Users\User\Downloads\content.zip`: Diabetic_Retinopathy_Balanced
+
+They are safely extracted, if needed, under:
+
+```powershell
+C:\Users\User\Downloads\AppDR_extra_datasets\
+```
+
+Run the inspection and count-only report:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe scripts\prepare_extra_weak_stage_data.py --inspect-only
+```
+
+Build the selected weak-stage feature table:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\prepare_extra_weak_stage_data.py
+```
+
+This reuses `backend/features_combined.csv`, selects only clear-label weak-stage
+images, extracts the same 203 handcrafted features only for the new images, and
+writes:
+
+- `backend/features_combined_balanced.csv`
+- `backend/results/selected_extra_dataset_manifest.csv`
+- `backend/results/selected_extra_clean.csv`
+- `backend/results/selected_extra_rejected.csv`
+- `backend/results/duplicate_report.csv`
+- `backend/results/extra_image_quality_report.csv`
+
+The balanced selection used no extra class 0 or class 2 images. It added:
+
+- Class 1: `529`
+- Class 3: `582`
+- Class 4: `308`
+
+New combined counts:
+
+- Class 0: `7966`
+- Class 1: `1500`
+- Class 2: `5411`
+- Class 3: `1000`
+- Class 4: `1500`
+
+Medium experimental training was run with classical ML only:
+
+```powershell
+.\.venv\Scripts\python.exe train.py --features-csv features_combined_balanced.csv --results-dir results\experimental_balanced_medium --trials 10 --smoke --skip-interpretability --skip-ensembles
+.\.venv\Scripts\python.exe train.py --features-csv features_combined_balanced.csv --results-dir results\experimental_balanced_medium\binary --trials 10 --binary-referable --smoke --skip-interpretability --skip-ensembles
+.\.venv\Scripts\python.exe scripts\generate_balanced_reports.py
+```
+
+Balanced experiment reports are saved as:
+
+- `backend/results/evaluation_report_balanced.md`
+- `backend/results/evaluation_report_balanced.json`
+- `backend/results/evaluation_report_balanced.csv`
+- `backend/results/confusion_matrix_balanced.csv`
+- `backend/results/screening_report_balanced.md`
+
+Balanced multiclass result: HistGradientBoosting, overall accuracy `54.57%`,
+balanced accuracy `57.21%`, macro F1 `47.90%`, and class 3 recall `68.00%`.
+Because macro F1 dropped below the production baseline `50.77%`, the production
+multiclass model was not replaced.
+
+Balanced binary result: XGBoost Calibrated Isotonic, referable recall `96.46%`,
+F1 `77.62%`, and false negatives `56`. This is promising for screening safety
+but over-refers more non-referable cases, so it is kept experimental unless that
+tradeoff is intentionally accepted later.
+
+### Study-Based Feature Selection Experiment
+
+Exact 5-class grading remained unstable after dataset balancing, so a separate
+study-style feature audit was added instead of adding more images blindly. It
+keeps the existing 203 handcrafted features and compares classical ML models
+only:
+
+- Logistic Regression baseline
+- Random Forest
+- XGBoost
+- SVM RBF
+
+Run it with:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe scripts\study_feature_selection_experiments.py --skip-shap
+```
+
+Outputs are saved under:
+
+```text
+backend/results/study_feature_selection/
+```
+
+Important files:
+
+- `feature_audit.json`
+- `feature_audit_removed_features.csv`
+- `feature_importance_study.csv`
+- `ranked_feature_sets.json`
+- `model_comparison_study.csv`
+- `binary_threshold_sweep.csv`
+- `study_feature_selection_report.md`
+- `study_feature_selection_report.json`
+
+The study backs up current production artifacts before it trains:
+
+```text
+backend/results/study_feature_selection/production_backup/
+```
+
+Current study result:
+
+- Best exact-grade candidate: SVM RBF with top `100` selected features
+- Accuracy: `66.02%`
+- Balanced accuracy: `60.83%`
+- Macro F1: `57.18%`
+- Class 1 recall: `45.33%`
+- Class 3 recall: `64.00%`
+- Class 4 recall: `62.33%`
+
+The best threshold sweep candidate was Random Forest with top `100` features at
+threshold `0.30`, with referable recall `94.82%` and `82` false negatives. The
+3-vs-4 sub-classifier did not reduce Severe NPDR vs Proliferative DR confusion.
+
+The production app was not automatically replaced because the best deployed
+screening model must remain strong and the selected-feature exact-grade model
+needs a production export/integration pass before replacing the 203-feature
+artifact. The app should continue to show binary referable screening as the main
+result and 5-class grading as supporting information.
+
 ### Current Training Snapshot
 
 - Raw OIA-DDR CSV counts: class `0=6266`, `1=630`, `2=4477`, `3=236`, `4=913`.
@@ -124,6 +265,12 @@ scikit-learn pipeline.
 - Added clean API response fields for `predicted_class`, `medical_label`,
   `confidence`, `explanation`, `recommendation`, `image_quality_status`, and
   `detected_features`.
+- Added screening-first API fields: `screening_result`, `screening_label`,
+  `screening_confidence`, `screening_confidence_level`,
+  `referable_probability`, `non_referable_probability`, `grade_confidence`, and
+  `disclaimer`.
+- Updated the mobile result screen so binary referable screening is the main
+  result and the 5-class DR grade is shown as supporting information.
 - Replaced short stage labels in the user interface with medical terminology.
 - Prevented duplicate feature vectors from leaking across train/test splits.
 - Added train/validation/test split reporting and feature-value sanitization for

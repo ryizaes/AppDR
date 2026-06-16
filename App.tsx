@@ -65,6 +65,10 @@ type SourceCodeModule = {
 type BackendConnectionState = 'idle' | 'checking' | 'connected' | 'offline';
 
 type BackendModelStatus = {
+  model_mode?: string;
+  demo_hybrid_ready?: boolean;
+  demo_models_dir?: string;
+  rollback_dir?: string;
   dual_tier_ready?: boolean;
   multiclass_loaded?: boolean;
   binary_loaded?: boolean;
@@ -143,6 +147,14 @@ type ScreeningTier = {
   recommendation: string;
 };
 
+type ClinicalBasisItem = {
+  grade: number | null;
+  medical_label: string;
+  clinical_reference: string;
+  app_mapping: string;
+  directly_assessed: boolean;
+};
+
 type ScreeningResult = {
   classification: string;
   referable: boolean;
@@ -177,22 +189,43 @@ type AnalysisHistoryEntry = {
 
 type AnalyzeResponse = {
   filename: string;
+  screening_result?: 'referable' | 'non_referable' | 'uncertain' | string;
+  screening_label?: string;
+  referable_result?: string;
+  screening_confidence?: number | null;
+  screening_confidence_level?: 'high' | 'medium' | 'low' | string;
+  referable_probability?: number | null;
+  non_referable_probability?: number | null;
   predicted_class?: number | null;
+  severity_grade?: number | null;
   medical_label?: string;
+  severity_label_medical?: string;
+  grade_confidence?: number | null;
   confidence?: number | null;
   explanation?: string;
   recommendation?: string;
+  model_type?: string;
+  model_version?: string;
+  clinical_basis?: ClinicalBasisItem[];
+  detected_supported_findings?: string[];
+  not_directly_assessed_findings?: string[];
+  disclaimer?: string;
+  clinical_note?: string;
+  limitations?: string[];
+  model_update_summary?: Record<string, unknown>;
   image_quality_status?:
     | string
     | {
         overall?: string;
         blur?: string;
         brightness?: string;
+        contrast?: string;
         warnings?: string[];
         retake_recommendations?: string[];
         quality_score?: number;
         quality_label?: string;
       };
+  image_quality?: Record<string, unknown>;
   detected_features?:
     | string[]
     | {
@@ -201,6 +234,7 @@ type AnalyzeResponse = {
         expanded_feature_count?: number;
         summary?: Record<string, number>;
       };
+  detected_feature_summary?: Record<string, unknown>;
   quality: QualityReport;
   features: FeatureReport;
   result: ScreeningResult;
@@ -335,8 +369,70 @@ const getMedicalLabel = (analysis: AnalyzeResponse): string =>
   analysis.result.stage_label ||
   formatClassValue(analysis.result.stage);
 
-const getConfidencePercent = (analysis: AnalyzeResponse): number | null => {
-  const raw = analysis.confidence ?? analysis.result.confidence;
+const getScreeningLabel = (analysis: AnalyzeResponse): string =>
+  analysis.screening_label ||
+  (analysis.result.referable
+    ? 'Referable diabetic retinopathy suspected'
+    : 'No referable diabetic retinopathy detected');
+
+const getScreeningResultKind = (
+  analysis: AnalyzeResponse,
+): 'referable' | 'non_referable' | 'uncertain' => {
+  if (analysis.screening_result === 'referable') {
+    return 'referable';
+  }
+
+  if (analysis.screening_result === 'non_referable') {
+    return 'non_referable';
+  }
+
+  if (
+    analysis.screening_result === 'uncertain' ||
+    !analysis.quality.is_acceptable ||
+    (analysis.screening_confidence !== null &&
+      analysis.screening_confidence !== undefined &&
+      analysis.screening_confidence < 0.6)
+  ) {
+    return 'uncertain';
+  }
+
+  return analysis.result.referable ? 'referable' : 'non_referable';
+};
+
+const getScreeningConfidencePercent = (
+  analysis: AnalyzeResponse,
+): number | null => {
+  const raw =
+    analysis.screening_confidence ??
+    Math.max(
+      analysis.referable_probability ?? analysis.result.dr_probability / 100,
+      analysis.non_referable_probability ??
+        1 - (analysis.result.dr_probability / 100),
+    );
+  return raw === null || raw === undefined ? null : raw * 100;
+};
+
+const getScreeningConfidenceLevel = (analysis: AnalyzeResponse): string => {
+  const level = analysis.screening_confidence_level;
+  if (level) {
+    return `${level.charAt(0).toUpperCase()}${level.slice(1)}`;
+  }
+
+  const confidence = getScreeningConfidencePercent(analysis);
+  if (confidence === null) {
+    return 'Low';
+  }
+  if (confidence >= 80) {
+    return 'High';
+  }
+  if (confidence >= 60) {
+    return 'Medium';
+  }
+  return 'Low';
+};
+
+const getGradeConfidencePercent = (analysis: AnalyzeResponse): number | null => {
+  const raw = analysis.grade_confidence ?? analysis.result.confidence;
   return raw === null || raw === undefined ? null : raw * 100;
 };
 
@@ -460,23 +556,15 @@ const getScreeningStatus = (analysis: AnalyzeResponse): ScreeningTier => {
   };
 };
 
-const getConfidenceLabel = (analysis: AnalyzeResponse): string =>
-  analysis.result.confidence_label ??
-  (analysis.result.confidence !== null &&
-  analysis.result.confidence !== undefined &&
-  analysis.result.confidence >= 0.75
-    ? 'High Confidence'
-    : analysis.result.confidence !== null &&
-        analysis.result.confidence !== undefined &&
-        analysis.result.confidence >= 0.45
-      ? 'Medium Confidence'
-      : 'Low Confidence');
-
 const isRuleBasedResult = (result: ScreeningResult): boolean =>
   !result.model_type || result.model_type === 'rule_based';
 
 const getModelTypeLabel = (modelType?: string): string => {
   switch (modelType) {
+    case 'ophthalmologist_demo_hybrid':
+      return 'Ophthalmologist demo hybrid';
+    case 'ophthalmologist_demo_hybrid_unavailable':
+      return 'Ophthalmologist demo hybrid unavailable';
     case 'dual_tier_handcrafted_features':
       return 'Dual-tier ML screening';
     case 'rule_based':
@@ -497,6 +585,10 @@ const isHealthResponse = (
 const getBackendModelSummary = (models?: BackendModelStatus): string | null => {
   if (!models) {
     return null;
+  }
+
+  if (models.model_mode === 'ophthalmologist_demo_hybrid') {
+    return `Ophthalmologist demo hybrid mode ${models.demo_hybrid_ready ? 'ready' : 'waiting for artifacts'}.`;
   }
 
   if (models.dual_tier_ready) {
@@ -1049,6 +1141,11 @@ export default function App(): React.JSX.Element {
         <Text style={styles.connectionText}>
           {backendStatus.endpoint ?? backendStatus.message}
         </Text>
+        {getBackendModelSummary(backendStatus.models) && (
+          <Text style={styles.connectionMeta}>
+            {getBackendModelSummary(backendStatus.models)}
+          </Text>
+        )}
         {backendStatus.checkedAt && (
           <Text style={styles.connectionMeta}>
             Last checked {backendStatus.checkedAt}
@@ -1407,13 +1504,57 @@ export default function App(): React.JSX.Element {
     </View>
   );
 
+  const renderClinicalBasisCard = (analysis: AnalyzeResponse) => {
+    const clinicalBasis = analysis.clinical_basis ?? [];
+
+    if (clinicalBasis.length === 0) {
+      return null;
+    }
+
+    return (
+      <View style={styles.summaryPanel}>
+        <Text style={styles.sectionTitle}>Clinical Basis</Text>
+        {clinicalBasis.map(item => (
+          <View key={`${item.grade}-${item.medical_label}`}>
+            <Text style={styles.recommendationText}>{item.medical_label}</Text>
+            <Text style={styles.reviewDisclaimer}>
+              {item.clinical_reference}
+            </Text>
+            <Text style={styles.reviewDisclaimer}>{item.app_mapping}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  const renderNotAssessedCard = (analysis: AnalyzeResponse) => {
+    const notAssessed = analysis.not_directly_assessed_findings ?? [];
+
+    if (notAssessed.length === 0) {
+      return null;
+    }
+
+    return (
+      <View style={styles.summaryPanel}>
+        <Text style={styles.sectionTitle}>Not Directly Assessed</Text>
+        {notAssessed.map(item => (
+          <Text key={item} style={styles.reviewDisclaimer}>
+            {item}
+          </Text>
+        ))}
+      </View>
+    );
+  };
+
   const renderRecommendationCard = (analysis: AnalyzeResponse) => (
     <View style={styles.summaryPanel}>
       <Text style={styles.sectionTitle}>Screening Recommendation</Text>
       <Text style={styles.recommendationText}>
         {getRecommendation(analysis)}
       </Text>
-      <Text style={styles.reviewDisclaimer}>{analysis.result.disclaimer}</Text>
+      <Text style={styles.reviewDisclaimer}>
+        {analysis.disclaimer || analysis.result.disclaimer}
+      </Text>
     </View>
   );
 
@@ -1500,6 +1641,47 @@ export default function App(): React.JSX.Element {
     );
   };
 
+  const renderModelUpdateSummaryCard = (analysis: AnalyzeResponse) => {
+    const summary = analysis.model_update_summary;
+
+    if (!summary || Object.keys(summary).length === 0) {
+      return null;
+    }
+
+    const textValue = (key: string): string | null => {
+      const value = summary[key];
+      return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+        ? String(value)
+        : null;
+    };
+
+    const rows = [
+      ['Current model mode', textValue('current_model_mode')],
+      ['Dataset used', textValue('dataset_used')],
+      ['Split', textValue('split')],
+      ['CNN source', textValue('cnn_source')],
+      ['Best validation macro F1', textValue('best_current_validation_macro_f1')],
+      ['5-class hybrid model', textValue('hybrid_5class_model')],
+      ['Binary hybrid model', textValue('hybrid_binary_model')],
+      ['Rollback available', textValue('rollback_available')],
+    ].filter(([, value]) => value);
+
+    return (
+      <View style={styles.summaryPanel}>
+        <Text style={styles.sectionTitle}>Model Update Summary</Text>
+        {rows.map(([label, value]) => (
+          <Text key={label} style={styles.modelMetricText}>
+            {label}: {value}
+          </Text>
+        ))}
+        <Text style={styles.resultFinePrint}>
+          {textValue('metrics_note') ??
+            'Validation/research metrics, not clinical deployment validation.'}
+        </Text>
+      </View>
+    );
+  };
+
   const renderResult = () => (
     <ScrollView style={styles.appSurface} contentContainerStyle={styles.page}>
       {renderTopBar('Case Review')}
@@ -1537,9 +1719,11 @@ export default function App(): React.JSX.Element {
             style={[
               styles.resultBand,
               selectedImage.analysis &&
-                (getScreeningStatus(selectedImage.analysis).referable
+                (getScreeningResultKind(selectedImage.analysis) === 'referable'
                   ? styles.resultBandReferable
-                  : styles.resultBandNonReferable),
+                  : getScreeningResultKind(selectedImage.analysis) === 'non_referable'
+                    ? styles.resultBandNonReferable
+                    : styles.resultBandUncertain),
             ]}
           >
             <Text style={styles.resultLabel}>
@@ -1549,7 +1733,7 @@ export default function App(): React.JSX.Element {
               {isAnalyzing
                 ? 'Automated analysis in progress'
                 : selectedImage.analysis
-                  ? getMedicalLabel(selectedImage.analysis)
+                  ? getScreeningLabel(selectedImage.analysis)
                   : 'Ready to analyze'}
             </Text>
             <Text style={styles.resultText}>
@@ -1562,18 +1746,31 @@ export default function App(): React.JSX.Element {
             {selectedImage.analysis && (
               <View style={styles.resultSummaryRow}>
                 <View style={styles.stageBadge}>
-                  <Text style={styles.stageBadgeLabel}>DR grade</Text>
+                  <Text style={styles.stageBadgeLabel}>Confidence</Text>
                   <Text style={styles.stageBadgeValue}>
-                    {selectedImage.analysis.result.stage ?? 'N/A'}
+                    {getScreeningConfidenceLevel(selectedImage.analysis)}
                   </Text>
                 </View>
                 <Text style={styles.resultProbability}>
-                  Confidence{' '}
-                  {getConfidencePercent(selectedImage.analysis) === null
-                    ? getConfidenceLabel(selectedImage.analysis)
-                    : formatPercent(getConfidencePercent(selectedImage.analysis) ?? 0)}
+                  Screening confidence{' '}
+                  {getScreeningConfidencePercent(selectedImage.analysis) === null
+                    ? getScreeningConfidenceLevel(selectedImage.analysis)
+                    : formatPercent(
+                        getScreeningConfidencePercent(selectedImage.analysis) ?? 0,
+                      )}
                   {'\n'}
-                  Referable risk {formatPercent(selectedImage.analysis.result.dr_probability)}
+                  Referable probability{' '}
+                  {formatPercent(
+                    (selectedImage.analysis.referable_probability ??
+                      selectedImage.analysis.result.dr_probability / 100) * 100,
+                  )}
+                  {'\n'}
+                  Possible DR classification: {getMedicalLabel(selectedImage.analysis)}
+                  {getGradeConfidencePercent(selectedImage.analysis) !== null
+                    ? ` (${formatPercent(
+                        getGradeConfidencePercent(selectedImage.analysis) ?? 0,
+                      )})`
+                    : ''}
                   {'\n'}
                   {getRecommendation(selectedImage.analysis)}
                 </Text>
@@ -1599,7 +1796,10 @@ export default function App(): React.JSX.Element {
               {renderRuleBasedBanner(selectedImage.analysis)}
               {renderQualityCard(selectedImage.analysis)}
               {renderFindingsCard(selectedImage.analysis)}
+              {renderClinicalBasisCard(selectedImage.analysis)}
+              {renderNotAssessedCard(selectedImage.analysis)}
               {renderModelInsightsCard(selectedImage.analysis)}
+              {renderModelUpdateSummaryCard(selectedImage.analysis)}
               {renderRecommendationCard(selectedImage.analysis)}
 
               {selectedImage.analysis.quality.is_acceptable && (
@@ -2359,6 +2559,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F7F0',
     borderColor: '#A7D8C6',
   },
+  resultBandUncertain: {
+    backgroundColor: '#FFF7E6',
+    borderColor: '#E7C36A',
+  },
   resultLabel: {
     color: '#0E7C7B',
     fontSize: 12,
@@ -2650,6 +2854,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     marginTop: 8,
+  },
+  resultFinePrint: {
+    color: '#4E666B',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
   },
   probabilityGroupTitle: {
     color: '#4E666B',

@@ -1,9 +1,30 @@
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.pipeline import analyze_image, build_analyze_response, get_supervised_model_status
-from app.schemas import AnalyzeResponse, AnalyzeTaskResponse, AnalyzeTaskStatusResponse
+from app.pipeline import (
+    analyze_image,
+    analyze_session_images,
+    build_analyze_response,
+    get_supervised_model_status,
+)
+from app.schemas import (
+    AnalyzeResponse,
+    AnalyzeSessionResponse,
+    AnalyzeTaskResponse,
+    AnalyzeTaskStatusResponse,
+    SessionImageMetadata,
+    UsabilityTrialFeedback,
+    UsabilityTrialFeedbackResponse,
+)
 from app.task_queue import get_task_status, submit_analysis, user_safe_analysis_error
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+TRIAL_FEEDBACK_PATH = BACKEND_DIR / "results" / "ml_full_study_upgrade" / "trial_feedback.jsonl"
 
 app = FastAPI(
     title="DR Screening Classical Processing API",
@@ -104,3 +125,67 @@ async def analyze_sync(
         ) from error
 
     return build_analyze_response(file.filename or "uploaded-image", output)
+
+
+@app.post("/analyze-session", response_model=AnalyzeSessionResponse)
+async def analyze_session(
+    files: list[UploadFile] = File(...),
+    session_id: str | None = Form(default=None),
+    eyes: list[str] | None = Form(default=None),
+    fields: list[str] | None = Form(default=None),
+    image_sources: list[str] | None = Form(default=None),
+) -> AnalyzeSessionResponse:
+    if not 1 <= len(files) <= 9:
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload 1 to 9 fundus images for a session.",
+        )
+
+    session_files: list[tuple[str, bytes, SessionImageMetadata]] = []
+    for index, file in enumerate(files):
+        if file.content_type is None or not file.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Please upload image files only.")
+        image_bytes = await file.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail=f"{file.filename or 'Image'} is empty.")
+        session_files.append(
+            (
+                file.filename or f"session-image-{index + 1}",
+                image_bytes,
+                SessionImageMetadata(
+                    eye=form_value_at(eyes, index, "unknown"),
+                    field=form_value_at(fields, index, "unknown"),
+                    image_source=form_value_at(image_sources, index, "unknown"),
+                ),
+            )
+        )
+
+    try:
+        return analyze_session_images(session_files, session_id=session_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=user_safe_analysis_error(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=user_safe_analysis_error(error)) from error
+
+
+@app.post("/trial-feedback", response_model=UsabilityTrialFeedbackResponse)
+def save_trial_feedback(
+    feedback: UsabilityTrialFeedback = Body(...),
+) -> UsabilityTrialFeedbackResponse:
+    TRIAL_FEEDBACK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = feedback.model_dump()
+    payload["created_at"] = datetime.now(timezone.utc).isoformat()
+    with TRIAL_FEEDBACK_PATH.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    return UsabilityTrialFeedbackResponse(
+        status="ok",
+        saved=True,
+        path=str(TRIAL_FEEDBACK_PATH),
+    )
+
+
+def form_value_at(values: list[str] | None, index: int, default: str) -> str:
+    if not values or index >= len(values):
+        return default
+    value = str(values[index]).strip()
+    return value or default

@@ -14,12 +14,18 @@ import numpy as np
 import config as ml_config
 from app.schemas import (
     AnalysisHistoryEntry,
+    AnalyzeSessionResponse,
     AnalyzeResponse,
+    ClinicalBasisItem,
     DetectionFinding,
     FeatureReport,
     QualityReport,
     ScreeningResult,
+    SessionImageMetadata,
+    SessionImageResult,
+    SessionSummary,
 )
+from app.demo_hybrid import classify_demo_hybrid
 from feature_extraction import (
     FeatureExtractionPayload,
     extract_feature_payload,
@@ -188,7 +194,7 @@ def analyze_image(
     )
     features.expanded_features = expanded_payload.features
     quality = add_feature_quality_warnings(quality, features)
-    result = stage5_classify(features, quality)
+    result = stage5_classify(features, quality, image=image)
     detected_findings = build_detection_findings(features)
     processed_images: dict[str, str] = {}
 
@@ -240,6 +246,31 @@ def process_image_path(image_path: str | Path) -> dict[str, Any]:
     return build_analyze_response(path.name, output).model_dump()
 
 
+def analyze_session_images(
+    files: list[tuple[str, bytes, SessionImageMetadata]],
+    session_id: str | None = None,
+) -> AnalyzeSessionResponse:
+    if not 1 <= len(files) <= 9:
+        raise ValueError("A patient session must contain 1 to 9 retinal images.")
+
+    image_results: list[SessionImageResult] = []
+    for filename, image_bytes, metadata in files:
+        output = analyze_image(image_bytes, include_processed_images=False)
+        analysis = build_analyze_response(filename, output)
+        image_results.append(
+            SessionImageResult(
+                filename=filename,
+                metadata=metadata,
+                analysis=analysis,
+            )
+        )
+
+    return aggregate_session_response(
+        image_results,
+        session_id=session_id or datetime.now(timezone.utc).strftime("session-%Y%m%d%H%M%S"),
+    )
+
+
 def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResponse:
     detected_finding_labels = [
         finding.label for finding in output.detected_findings if finding.detected
@@ -250,10 +281,25 @@ def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResp
         "expanded_feature_count": len(output.features.expanded_features or {}),
         "summary": {
             "microaneurysm_count": output.features.microaneurysm_count,
+            "microaneurysm_red_lesion_indicators": output.features.microaneurysm_count,
+            "hemorrhage_dark_lesion_indicators": output.features.dark_lesion_count,
             "exudate_count": output.features.exudate_count,
+            "exudate_bright_lesion_indicators": output.features.exudate_count,
             "exudate_area": output.features.exudate_area,
             "vessel_density": output.features.vessel_density,
+            "vessel_texture_indicators": {
+                "vessel_density": output.features.vessel_density,
+                "glcm_contrast": output.features.glcm_contrast,
+                "glcm_homogeneity": output.features.glcm_homogeneity,
+                "glcm_energy": output.features.glcm_energy,
+            },
             "pathology_area_index": output.features.pathology_area_index,
+            "quality_indicators": {
+                "blur_score": output.quality.blur_score,
+                "brightness_mean": output.quality.brightness_mean,
+                "contrast_std": output.quality.contrast_std,
+                "quality_score": output.quality.quality_score,
+            },
         },
     }
     history_entry = AnalysisHistoryEntry(
@@ -263,17 +309,47 @@ def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResp
         confidence_level=output.result.confidence_label,
         screening_recommendation=output.result.screening_recommendation,
     )
+    screening_fields = build_screening_response_fields(output.result, output.quality)
 
     return AnalyzeResponse(
         filename=filename or "uploaded-image",
+        screening_result=screening_fields["screening_result"],
+        screening_label=screening_fields["screening_label"],
+        referable_result=(
+            "Referable DR"
+            if screening_fields["screening_result"] == "referable"
+            else "Non-referable DR"
+            if screening_fields["screening_result"] == "non_referable"
+            else "Uncertain screening result"
+        ),
+        screening_confidence=screening_fields["screening_confidence"],
+        screening_confidence_level=screening_fields["screening_confidence_level"],
+        referable_probability=screening_fields["referable_probability"],
+        non_referable_probability=screening_fields["non_referable_probability"],
         predicted_class=output.result.stage,
+        severity_grade=output.result.stage,
         medical_label=output.result.medical_label or output.result.stage_label,
+        severity_label_medical=output.result.medical_label or output.result.stage_label,
+        grade_confidence=output.result.confidence,
         confidence=output.result.confidence,
-        explanation=output.result.explanation or output.result.reason,
-        recommendation=output.result.recommendation
-        or output.result.screening_recommendation,
+        explanation=screening_fields["explanation"],
+        recommendation=screening_fields["recommendation"],
+        model_type=output.result.model_type,
+        model_version=model_version_label(),
+        clinical_basis=clinical_basis_for_stage(output.result.stage),
+        detected_supported_findings=detected_finding_labels,
+        not_directly_assessed_findings=not_directly_assessed_findings(),
+        disclaimer=screening_fields["disclaimer"],
         image_quality_status=build_image_quality_status(output.quality),
+        image_quality=build_image_quality_status(output.quality),
         detected_features=detected_features,
+        detected_feature_summary=detected_features["summary"],
+        clinical_note=(
+            "This result is an automated screening support output and is not a "
+            "final diagnosis. Please confirm with an ophthalmologist."
+        ),
+        limitations=not_directly_assessed_findings(),
+        model_update_summary=model_update_summary(),
         quality=output.quality,
         features=output.features,
         result=output.result,
@@ -283,6 +359,297 @@ def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResp
         lesion_regions=output.lesion_regions,
         image_shape=output.image_shape,
     )
+
+
+def aggregate_session_response(
+    image_results: list[SessionImageResult],
+    session_id: str,
+) -> AnalyzeSessionResponse:
+    image_count = len(image_results)
+    poor_quality_count = sum(
+        1
+        for item in image_results
+        if item.analysis.image_quality_status.get("overall") != "acceptable"
+    )
+    usable = [item for item in image_results if item.analysis.quality.is_acceptable]
+
+    referable_probabilities = [
+        (
+            float(item.analysis.referable_probability or 0.0),
+            item,
+        )
+        for item in image_results
+    ]
+    strongest_probability, strongest_item = max(
+        referable_probabilities,
+        key=lambda pair: pair[0],
+    )
+    max_stage_items = [
+        item for item in image_results if item.analysis.predicted_class is not None
+    ]
+    max_stage_item = (
+        max(max_stage_items, key=lambda item: int(item.analysis.predicted_class or 0))
+        if max_stage_items
+        else None
+    )
+    average_probabilities = average_session_probabilities(image_results)
+
+    if poor_quality_count > image_count / 2:
+        screening_result = "uncertain"
+        screening_label = "Uncertain session result"
+        recommendation = (
+            "Most session images have limited quality. Retake images before relying "
+            "on the screening-support output, or consult an ophthalmologist."
+        )
+    elif any(item.analysis.screening_result == "referable" for item in usable):
+        screening_result = "referable"
+        screening_label = "Referable diabetic retinopathy suspected in session"
+        recommendation = (
+            "At least one image suggests referable diabetic retinopathy. "
+            "Ophthalmology evaluation is recommended."
+        )
+    elif usable and all(item.analysis.screening_result == "non_referable" for item in usable):
+        screening_result = "non_referable"
+        screening_label = "No referable diabetic retinopathy detected in session"
+        recommendation = (
+            "No image produced a referable screening result, but confirm with an "
+            "ophthalmologist as part of routine eye care."
+        )
+    else:
+        screening_result = "uncertain"
+        screening_label = "Uncertain session result"
+        recommendation = (
+            "The session has mixed or low-confidence image-level outputs. "
+            "Review with an ophthalmologist or capture additional angles."
+        )
+
+    summary = SessionSummary(
+        session_id=session_id,
+        screening_result=screening_result,
+        screening_label=screening_label,
+        recommendation=recommendation,
+        image_count=image_count,
+        poor_quality_count=poor_quality_count,
+        strongest_referable_probability=strongest_probability,
+        strongest_image_filename=strongest_item.filename,
+        max_predicted_class=(
+            int(max_stage_item.analysis.predicted_class)
+            if max_stage_item and max_stage_item.analysis.predicted_class is not None
+            else None
+        ),
+        max_medical_label=max_stage_item.analysis.medical_label if max_stage_item else "",
+        average_probabilities=average_probabilities,
+    )
+    return AnalyzeSessionResponse(session=summary, images=image_results)
+
+
+def average_session_probabilities(image_results: list[SessionImageResult]) -> dict[str, float]:
+    totals: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for item in image_results:
+        for key, value in item.analysis.result.probabilities.items():
+            totals[key] = totals.get(key, 0.0) + float(value)
+            counts[key] = counts.get(key, 0) + 1
+    return {
+        key: round(totals[key] / max(counts.get(key, 1), 1), 6)
+        for key in sorted(totals)
+    }
+
+
+def model_version_label() -> str:
+    if ml_config.MODEL_MODE == ml_config.DEMO_HYBRID_MODE:
+        return "ophthalmologist_demo_hybrid_efficientnet_b3_appdr203"
+    status = get_supervised_model_status()
+    if status.get("dual_tier_ready"):
+        return "production_xgboost_grading_svm_rbf_screening_203_features"
+    if status.get("binary_loaded"):
+        return "production_svm_rbf_screening_203_features"
+    if status.get("multiclass_loaded"):
+        return "production_xgboost_grading_203_features"
+    return "rule_based_classical_processing"
+
+
+def clinical_basis_for_stage(stage: int | None) -> list[ClinicalBasisItem]:
+    references = {
+        0: (
+            "No apparent diabetic retinopathy.",
+            "No apparent DR is represented by low lesion evidence in the image-level feature vector.",
+        ),
+        1: (
+            "Mild NPDR is commonly associated with microaneurysms only.",
+            "The app supports this with microaneurysm/red-lesion candidate features, but they need clinician review.",
+        ),
+        2: (
+            "Moderate NPDR may include microaneurysms or hemorrhages with hard exudates, cotton wool spots, or venous beading.",
+            "The app directly supports microaneurysm, hemorrhage-candidate, hard-exudate, cotton-wool-candidate, and vessel-proxy features.",
+        ),
+        3: (
+            "Severe NPDR is clinically associated with the 4-2-1 rule: extensive hemorrhages, venous beading, or IRMA, without PDR signs.",
+            "The app has quadrant/spread and vessel-abnormality proxies, but does not directly assess venous beading or IRMA.",
+        ),
+        4: (
+            "Proliferative DR is associated with neovascularization or vitreous/preretinal hemorrhage.",
+            "The current production model has severe-lesion and vessel proxies only; it does not directly detect neovascularization or vitreous/preretinal hemorrhage.",
+        ),
+    }
+    label = ML_STAGE_LABELS.get(int(stage), "Unstageable") if stage is not None else "Unstageable"
+    clinical_reference, app_mapping = references.get(
+        int(stage) if stage is not None else -1,
+        (
+            "The image could not be assigned a reliable DR severity support grade.",
+            "The app recommends retake or ophthalmologist review.",
+        ),
+    )
+    return [
+        ClinicalBasisItem(
+            grade=stage,
+            medical_label=label,
+            clinical_reference=clinical_reference,
+            app_mapping=app_mapping,
+            directly_assessed=stage in {0, 1, 2},
+        )
+    ]
+
+
+def not_directly_assessed_findings() -> list[str]:
+    return [
+        "Venous beading is not directly assessed unless validated.",
+        "IRMA is not directly assessed unless validated.",
+        "Neovascularization is not directly assessed unless validated.",
+        "Vitreous or preretinal hemorrhage is not directly assessed unless validated.",
+        "Result depends on fundus image quality and field of view.",
+        "Patient-level progression is not assessed without true patient/session metadata.",
+    ]
+
+
+def model_update_summary() -> dict[str, object]:
+    if ml_config.MODEL_MODE != ml_config.DEMO_HYBRID_MODE:
+        return {
+            "current_model_mode": "Production",
+            "production_unchanged": True,
+        }
+    return {
+        "current_model_mode": "Ophthalmologist Demo Hybrid",
+        "dataset_used": "17,377 readable labeled images",
+        "split": "12,163 train / 2,607 validation / 2,607 test",
+        "cnn_source": "EfficientNet-B3, 384px, ImageNet pretrained, GeM pooling",
+        "best_current_validation_macro_f1": "72.69% at epoch 13",
+        "hybrid_5class_model": "Logistic Regression, v4 AppDR203 + CNN predictions + embedding PCA64",
+        "hybrid_5class_metrics": "Accuracy 82.74%, balanced accuracy 73.20%, macro F1 73.93%",
+        "hybrid_binary_model": "LightGBM, v3 AppDR203 + CNN embedding PCA128",
+        "hybrid_binary_metrics": "Referable recall 95.96%, FN 48, FP 251, F1 88.40%",
+        "metrics_note": "Validation/research metrics, not clinical deployment validation.",
+        "production_unchanged": True,
+        "rollback_available": True,
+    }
+
+
+def build_screening_response_fields(
+    result: ScreeningResult,
+    quality: QualityReport,
+) -> dict[str, object]:
+    """Create the mobile-facing safety-first screening summary.
+
+    The binary referable model is the primary screening signal. The 5-class DR
+    grade remains a supporting estimate, not a final diagnosis.
+    """
+    referable_probability = result.probabilities.get(
+        "Referable",
+        float(result.dr_probability) / 100.0,
+    )
+    referable_probability = float(np.clip(referable_probability, 0.0, 1.0))
+    non_referable_probability = result.probabilities.get(
+        "Non-Referable",
+        1.0 - referable_probability,
+    )
+    non_referable_probability = float(np.clip(non_referable_probability, 0.0, 1.0))
+    screening_confidence = max(referable_probability, non_referable_probability)
+    confidence_level = screening_confidence_level(screening_confidence)
+    disclaimer = (
+        "This app is a screening support tool only and does not provide a final "
+        "medical diagnosis. Please consult an ophthalmologist for confirmation."
+    )
+
+    if not quality.is_acceptable:
+        return {
+            "screening_result": "uncertain",
+            "screening_label": "Uncertain screening result",
+            "screening_confidence": screening_confidence,
+            "screening_confidence_level": "low",
+            "referable_probability": referable_probability,
+            "non_referable_probability": non_referable_probability,
+            "explanation": (
+                "The result is uncertain because the retinal image quality is low. "
+                "Please retake the image before relying on screening output."
+            ),
+            "recommendation": (
+                "Uncertain result - retake the image in better focus and lighting, "
+                "or consult an ophthalmologist."
+            ),
+            "disclaimer": disclaimer,
+        }
+
+    if screening_confidence < 0.60:
+        return {
+            "screening_result": "uncertain",
+            "screening_label": "Uncertain screening result",
+            "screening_confidence": screening_confidence,
+            "screening_confidence_level": confidence_level,
+            "referable_probability": referable_probability,
+            "non_referable_probability": non_referable_probability,
+            "explanation": (
+                "The screening model does not have enough confidence to make a "
+                "clear referable/non-referable call."
+            ),
+            "recommendation": (
+                "Uncertain result - retake the image or consult an ophthalmologist."
+            ),
+            "disclaimer": disclaimer,
+        }
+
+    if referable_probability >= non_referable_probability:
+        return {
+            "screening_result": "referable",
+            "screening_label": "Referable diabetic retinopathy suspected",
+            "screening_confidence": screening_confidence,
+            "screening_confidence_level": confidence_level,
+            "referable_probability": referable_probability,
+            "non_referable_probability": non_referable_probability,
+            "explanation": (
+                "The screening model suggests signs that may require ophthalmology "
+                "referral. The exact DR grade is shown as a supporting result only."
+            ),
+            "recommendation": (
+                "Referable DR suspected - ophthalmology evaluation recommended."
+            ),
+            "disclaimer": disclaimer,
+        }
+
+    return {
+        "screening_result": "non_referable",
+        "screening_label": "No referable diabetic retinopathy detected",
+        "screening_confidence": screening_confidence,
+        "screening_confidence_level": confidence_level,
+        "referable_probability": referable_probability,
+        "non_referable_probability": non_referable_probability,
+        "explanation": (
+            "The screening model did not detect signs that strongly suggest "
+            "referable diabetic retinopathy in this image."
+        ),
+        "recommendation": (
+            "No urgent referral indicated by the screening model, but confirm with "
+            "an ophthalmologist as part of routine eye care."
+        ),
+        "disclaimer": disclaimer,
+    }
+
+
+def screening_confidence_level(confidence: float) -> str:
+    if confidence >= 0.80:
+        return "high"
+    if confidence >= 0.60:
+        return "medium"
+    return "low"
 
 
 def build_image_quality_status(quality: QualityReport) -> dict[str, object]:
@@ -301,10 +668,12 @@ def build_image_quality_status(quality: QualityReport) -> dict[str, object]:
         if quality.is_acceptable
         else "poor"
     )
+    contrast_status = "too_low" if "contrast" in warnings_text else "acceptable"
     return {
         "overall": overall,
         "blur": blur_status,
         "brightness": brightness_status,
+        "contrast": contrast_status,
         "warnings": quality.warnings,
         "retake_recommendations": quality.retake_recommendations,
         "quality_score": quality.quality_score,
@@ -940,7 +1309,11 @@ def extract_spatial_features(
     return values
 
 
-def stage5_classify(features: FeatureReport, quality: QualityReport) -> ScreeningResult:
+def stage5_classify(
+    features: FeatureReport,
+    quality: QualityReport,
+    image: np.ndarray | None = None,
+) -> ScreeningResult:
     if not quality.is_acceptable:
         screening = screening_tier_for_stage(None)
         return ScreeningResult(
@@ -961,6 +1334,38 @@ def stage5_classify(features: FeatureReport, quality: QualityReport) -> Screenin
                 "reviewing diabetic retinopathy features."
             ),
             confidence_label="Low Confidence",
+            screening=screening,
+            screening_recommendation=str(screening["recommendation"]),
+        )
+
+    if ml_config.MODEL_MODE == ml_config.DEMO_HYBRID_MODE and image is not None:
+        demo_result = classify_demo_hybrid(image, features)
+        if demo_result is not None:
+            return demo_result
+        screening = screening_tier_for_stage(None)
+        return ScreeningResult(
+            classification="Ophthalmologist demo hybrid model unavailable",
+            referable=False,
+            dr_probability=0.0,
+            stage=None,
+            stage_label="Demo hybrid unavailable",
+            medical_label="Demo hybrid unavailable",
+            explanation=(
+                "The backend is configured for the ophthalmologist demo hybrid "
+                "model, but the required hybrid artifacts were not loaded."
+            ),
+            recommendation=(
+                "Confirm that backend/results/demo_ophthalmologist_update/models/ "
+                "contains the CNN checkpoint, PCA, and hybrid model artifacts."
+            ),
+            reason="Demo hybrid mode does not fall back to the old production model.",
+            disclaimer=(
+                "This app is a screening support tool only and does not provide "
+                "a final medical diagnosis."
+            ),
+            model_type="ophthalmologist_demo_hybrid_unavailable",
+            confidence_label="Low Confidence",
+            probabilities={"Non-Referable": 1.0, "Referable": 0.0},
             screening=screening,
             screening_recommendation=str(screening["recommendation"]),
         )
@@ -1273,7 +1678,21 @@ def dual_tier_model_type(has_stage_model: bool, has_binary_model: bool) -> str:
 def get_supervised_model_status() -> dict[str, object]:
     stage_model = load_supervised_model()
     binary_model = load_binary_screening_model()
+    demo_models_dir = ml_config.DEMO_OPHTHALMOLOGIST_DIR / "models"
+    demo_ready = all(
+        (demo_models_dir / name).exists()
+        for name in [
+            "hybrid_5class_best_model.pkl",
+            "hybrid_binary_best_model.pkl",
+            "cnn_best_model.pt",
+            "embedding_pca.pkl",
+        ]
+    )
     return {
+        "model_mode": ml_config.MODEL_MODE,
+        "demo_hybrid_ready": demo_ready,
+        "demo_models_dir": str(demo_models_dir),
+        "rollback_dir": str(ml_config.RESULTS_DIR / "backup_before_ophthalmologist_demo"),
         "multiclass_loaded": stage_model is not None,
         "multiclass_model": (
             supervised_model_display_name() if stage_model is not None else None

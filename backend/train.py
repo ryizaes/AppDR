@@ -118,6 +118,7 @@ def train_models(
     resume_completed: bool = False,
     smoke: bool = False,
     skip_interpretability: bool = False,
+    skip_ensembles: bool = False,
 ) -> dict[str, Any]:
     """Run the complete training, selection, and artifact export workflow."""
     if n_trials < MIN_OPTUNA_TRIALS and not smoke:
@@ -299,19 +300,23 @@ def train_models(
         resume_completed=resume_completed,
     )
 
-    ensemble_candidates = build_ensemble_candidates(
-        optimized_candidates,
-        x_train=x_train,
-        y_train=y_train,
-        feature_names=feature_names,
-        full_feature_names=full_feature_names,
-        selected_features=selected_features,
-        scaler_name=scaler_name,
-        engineering_enabled=engineering_enabled,
-        problem_type=problem_type,
-        class_labels=class_labels,
-        cv=cv,
-    )
+    if skip_ensembles:
+        ensemble_candidates = []
+        print("Skipping ensemble candidates for this run", flush=True)
+    else:
+        ensemble_candidates = build_ensemble_candidates(
+            optimized_candidates,
+            x_train=x_train,
+            y_train=y_train,
+            feature_names=feature_names,
+            full_feature_names=full_feature_names,
+            selected_features=selected_features,
+            scaler_name=scaler_name,
+            engineering_enabled=engineering_enabled,
+            problem_type=problem_type,
+            class_labels=class_labels,
+            cv=cv,
+        )
 
     all_candidates = [*optimized_candidates, *ensemble_candidates]
     print(f"Built {len(ensemble_candidates)} ensemble candidates", flush=True)
@@ -411,6 +416,7 @@ def train_models(
         "optuna_trials_per_model": n_trials,
         "smoke_run": bool(smoke),
         "interpretability_skipped": bool(skip_interpretability),
+        "ensembles_skipped": bool(skip_ensembles),
         "scaler": scaler_name,
         "engineered_features_enabled": bool(engineering_enabled),
         "selected_feature_count": len(selected_features),
@@ -456,6 +462,7 @@ def train_models(
             "threshold": optimal_threshold.get("threshold"),
             "artifact_paths": artifact_path_report(),
             "interpretability_skipped": bool(skip_interpretability),
+            "ensembles_skipped": bool(skip_ensembles),
         },
     )
 
@@ -2496,11 +2503,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip slow SHAP/permutation artifacts while still exporting the model and metrics.",
     )
+    parser.add_argument(
+        "--skip-ensembles",
+        action="store_true",
+        help="Skip slow voting/stacking ensembles while still selecting from tuned base models.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
-    warnings.filterwarnings("ignore", category=UserWarning)
     args = parse_args()
     results_dir = args.results_dir
     if results_dir is None:
@@ -2513,4 +2524,5 @@ if __name__ == "__main__":
         resume_completed=args.resume,
         smoke=args.smoke,
         skip_interpretability=args.skip_interpretability,
+        skip_ensembles=args.skip_ensembles,
     )
