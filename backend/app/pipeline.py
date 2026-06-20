@@ -25,7 +25,14 @@ from app.schemas import (
     SessionImageResult,
     SessionSummary,
 )
-from app.demo_hybrid import classify_demo_hybrid
+from app.demo_hybrid import (
+    BINARY_MODEL_PATH as DUAL_BINARY_MODEL_PATH,
+    CNN_CHECKPOINT_PATH as DUAL_CNN_CHECKPOINT_PATH,
+    SCREENING_MODEL_SOURCE,
+    SEVERITY_MODEL_PATH as DUAL_SEVERITY_MODEL_PATH,
+    SEVERITY_MODEL_SOURCE,
+    classify_demo_hybrid,
+)
 from feature_extraction import (
     FeatureExtractionPayload,
     extract_feature_payload,
@@ -315,13 +322,7 @@ def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResp
         filename=filename or "uploaded-image",
         screening_result=screening_fields["screening_result"],
         screening_label=screening_fields["screening_label"],
-        referable_result=(
-            "Referable DR"
-            if screening_fields["screening_result"] == "referable"
-            else "Non-referable DR"
-            if screening_fields["screening_result"] == "non_referable"
-            else "Uncertain screening result"
-        ),
+        referable_result=str(screening_fields["screening_label"]),
         screening_confidence=screening_fields["screening_confidence"],
         screening_confidence_level=screening_fields["screening_confidence_level"],
         referable_probability=screening_fields["referable_probability"],
@@ -336,6 +337,12 @@ def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResp
         recommendation=screening_fields["recommendation"],
         model_type=output.result.model_type,
         model_version=model_version_label(),
+        model_mode=ml_config.MODEL_MODE,
+        binary_model_source=output.result.binary_model_source,
+        severity_model_source=output.result.severity_model_source,
+        consistency_status=output.result.consistency_status,
+        raw_binary_prediction=output.result.raw_binary_prediction,
+        raw_severity_prediction=output.result.raw_severity_prediction,
         clinical_basis=clinical_basis_for_stage(output.result.stage),
         detected_supported_findings=detected_finding_labels,
         not_directly_assessed_findings=not_directly_assessed_findings(),
@@ -345,7 +352,7 @@ def build_analyze_response(filename: str, output: PipelineOutput) -> AnalyzeResp
         detected_features=detected_features,
         detected_feature_summary=detected_features["summary"],
         clinical_note=(
-            "This result is an automated screening support output and is not a "
+            "This result is for screening support only and is not a "
             "final diagnosis. Please confirm with an ophthalmologist."
         ),
         limitations=not_directly_assessed_findings(),
@@ -457,8 +464,8 @@ def average_session_probabilities(image_results: list[SessionImageResult]) -> di
 
 
 def model_version_label() -> str:
-    if ml_config.MODEL_MODE == ml_config.DEMO_HYBRID_MODE:
-        return "ophthalmologist_demo_hybrid_efficientnet_b3_appdr203"
+    if ml_config.uses_dual_model_mode():
+        return "dual_model_appdr_binary_svm_full_training_hybrid_severity"
     status = get_supervised_model_status()
     if status.get("dual_tier_ready"):
         return "production_xgboost_grading_svm_rbf_screening_203_features"
@@ -523,21 +530,21 @@ def not_directly_assessed_findings() -> list[str]:
 
 
 def model_update_summary() -> dict[str, object]:
-    if ml_config.MODEL_MODE != ml_config.DEMO_HYBRID_MODE:
+    if not ml_config.uses_dual_model_mode():
         return {
             "current_model_mode": "Production",
             "production_unchanged": True,
         }
     return {
-        "current_model_mode": "Ophthalmologist Demo Hybrid",
+        "current_model_mode": "Task-specific dual model",
         "dataset_used": "17,377 readable labeled images",
         "split": "12,163 train / 2,607 validation / 2,607 test",
         "cnn_source": "EfficientNet-B3, 384px, ImageNet pretrained, GeM pooling",
-        "best_current_validation_macro_f1": "72.69% at epoch 13",
-        "hybrid_5class_model": "Logistic Regression, v4 AppDR203 + CNN predictions + embedding PCA64",
-        "hybrid_5class_metrics": "Accuracy 82.74%, balanced accuracy 73.20%, macro F1 73.93%",
-        "hybrid_binary_model": "LightGBM, v3 AppDR203 + CNN embedding PCA128",
-        "hybrid_binary_metrics": "Referable recall 95.96%, FN 48, FP 251, F1 88.40%",
+        "best_current_validation_macro_f1": "75.98% at epoch 16",
+        "severity_model": "Full-training hybrid 5-class XGBoost",
+        "severity_model_metrics": "Accuracy 83.85%, balanced accuracy 72.35%, macro F1 74.52%",
+        "screening_model": "AppDR binary SVM",
+        "screening_model_metrics": "Referable recall 95.70%, FN 51, FP 398, F1 83.50%",
         "metrics_note": "Validation/research metrics, not clinical deployment validation.",
         "production_unchanged": True,
         "rollback_available": True,
@@ -589,6 +596,25 @@ def build_screening_response_fields(
             "disclaimer": disclaimer,
         }
 
+    if result.consistency_status != "aligned":
+        return {
+            "screening_result": "referable_review",
+            "screening_label": "Referable / Needs ophthalmologist review",
+            "screening_confidence": screening_confidence,
+            "screening_confidence_level": confidence_level,
+            "referable_probability": referable_probability,
+            "non_referable_probability": non_referable_probability,
+            "explanation": (
+                "The screening and supporting severity outputs require clinical "
+                "confirmation."
+            ),
+            "recommendation": (
+                "Please arrange ophthalmologist review before relying on this "
+                "screening-support result."
+            ),
+            "disclaimer": disclaimer,
+        }
+
     if screening_confidence < 0.60:
         return {
             "screening_result": "uncertain",
@@ -607,17 +633,17 @@ def build_screening_response_fields(
             "disclaimer": disclaimer,
         }
 
-    if referable_probability >= non_referable_probability:
+    if result.referable:
         return {
             "screening_result": "referable",
-            "screening_label": "Referable diabetic retinopathy suspected",
+            "screening_label": "Referable DR",
             "screening_confidence": screening_confidence,
             "screening_confidence_level": confidence_level,
             "referable_probability": referable_probability,
             "non_referable_probability": non_referable_probability,
             "explanation": (
                 "The screening model suggests signs that may require ophthalmology "
-                "referral. The exact DR grade is shown as a supporting result only."
+                "referral. The medical severity assessment is supporting information only."
             ),
             "recommendation": (
                 "Referable DR suspected - ophthalmology evaluation recommended."
@@ -627,7 +653,7 @@ def build_screening_response_fields(
 
     return {
         "screening_result": "non_referable",
-        "screening_label": "No referable diabetic retinopathy detected",
+        "screening_label": "Non-referable DR",
         "screening_confidence": screening_confidence,
         "screening_confidence_level": confidence_level,
         "referable_probability": referable_probability,
@@ -1338,32 +1364,32 @@ def stage5_classify(
             screening_recommendation=str(screening["recommendation"]),
         )
 
-    if ml_config.MODEL_MODE == ml_config.DEMO_HYBRID_MODE and image is not None:
+    if ml_config.uses_dual_model_mode() and image is not None:
         demo_result = classify_demo_hybrid(image, features)
         if demo_result is not None:
             return demo_result
         screening = screening_tier_for_stage(None)
         return ScreeningResult(
-            classification="Ophthalmologist demo hybrid model unavailable",
+            classification="Analysis models unavailable",
             referable=False,
             dr_probability=0.0,
             stage=None,
-            stage_label="Demo hybrid unavailable",
-            medical_label="Demo hybrid unavailable",
+            stage_label="Medical severity assessment unavailable",
+            medical_label="Medical severity assessment unavailable",
             explanation=(
-                "The backend is configured for the ophthalmologist demo hybrid "
-                "model, but the required hybrid artifacts were not loaded."
+                "The backend is configured for task-specific screening and severity "
+                "models, but the required artifacts were not loaded."
             ),
             recommendation=(
-                "Confirm that backend/results/demo_ophthalmologist_update/models/ "
-                "contains the CNN checkpoint, PCA, and hybrid model artifacts."
+                "Confirm that the configured screening, severity, and image-feature "
+                "model artifacts are available."
             ),
-            reason="Demo hybrid mode does not fall back to the old production model.",
+            reason="Dual-model mode does not silently fall back to another model route.",
             disclaimer=(
                 "This app is a screening support tool only and does not provide "
                 "a final medical diagnosis."
             ),
-            model_type="ophthalmologist_demo_hybrid_unavailable",
+            model_type="dual_model_unavailable",
             confidence_label="Low Confidence",
             probabilities={"Non-Referable": 1.0, "Referable": 0.0},
             screening=screening,
@@ -1433,7 +1459,7 @@ def classify_by_supervised_feature_model(features: FeatureReport) -> ScreeningRe
         stage_confidence = (
             max(stage_probabilities.values()) if stage_probabilities else None
         )
-        stage_label = ML_STAGE_LABELS.get(stage, f"Diabetic retinopathy grade {stage}")
+        stage_label = ML_STAGE_LABELS.get(stage, "Medical severity label unavailable")
 
     referable = bool(screening_tier_for_stage(stage)["referable"])
     dr_probability = supervised_referable_probability(stage, stage_probabilities)
@@ -1678,20 +1704,21 @@ def dual_tier_model_type(has_stage_model: bool, has_binary_model: bool) -> str:
 def get_supervised_model_status() -> dict[str, object]:
     stage_model = load_supervised_model()
     binary_model = load_binary_screening_model()
-    demo_models_dir = ml_config.DEMO_OPHTHALMOLOGIST_DIR / "models"
-    demo_ready = all(
-        (demo_models_dir / name).exists()
-        for name in [
-            "hybrid_5class_best_model.pkl",
-            "hybrid_binary_best_model.pkl",
-            "cnn_best_model.pt",
-            "embedding_pca.pkl",
+    dual_model_ready = all(
+        path.exists()
+        for path in [
+            DUAL_BINARY_MODEL_PATH,
+            DUAL_SEVERITY_MODEL_PATH,
+            DUAL_CNN_CHECKPOINT_PATH,
         ]
     )
     return {
         "model_mode": ml_config.MODEL_MODE,
-        "demo_hybrid_ready": demo_ready,
-        "demo_models_dir": str(demo_models_dir),
+        "dual_model_ready": dual_model_ready,
+        "demo_hybrid_ready": dual_model_ready,
+        "binary_model_source": SCREENING_MODEL_SOURCE,
+        "severity_model_source": SEVERITY_MODEL_SOURCE,
+        "severity_model_path": str(DUAL_SEVERITY_MODEL_PATH),
         "rollback_dir": str(ml_config.RESULTS_DIR / "backup_before_ophthalmologist_demo"),
         "multiclass_loaded": stage_model is not None,
         "multiclass_model": (

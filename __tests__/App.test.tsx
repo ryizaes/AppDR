@@ -4,7 +4,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import App from '../App';
+import App, { CLASS_LABELS, formatClassValue } from '../App';
 
 jest.mock('react-native-vision-camera', () => {
   const MockReact = require('react');
@@ -44,4 +44,19 @@ test('renders correctly', async () => {
   await ReactTestRenderer.act(async () => {
     renderer?.unmount();
   });
+});
+
+test('uses medical severity labels without numeric class wording', () => {
+  expect(CLASS_LABELS).toEqual({
+    0: 'No apparent diabetic retinopathy',
+    1: 'Mild non-proliferative diabetic retinopathy',
+    2: 'Moderate non-proliferative diabetic retinopathy',
+    3: 'Severe non-proliferative diabetic retinopathy',
+    4: 'Proliferative diabetic retinopathy',
+  });
+
+  Object.values(CLASS_LABELS).forEach(label => {
+    expect(label).not.toMatch(/^(Class|Grade)\s+[0-4]$/i);
+  });
+  expect(formatClassValue(99)).toBe('Medical severity label unavailable');
 });

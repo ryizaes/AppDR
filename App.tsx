@@ -66,6 +66,7 @@ type BackendConnectionState = 'idle' | 'checking' | 'connected' | 'offline';
 
 type BackendModelStatus = {
   model_mode?: string;
+  dual_model_ready?: boolean;
   demo_hybrid_ready?: boolean;
   demo_models_dir?: string;
   rollback_dir?: string;
@@ -74,6 +75,8 @@ type BackendModelStatus = {
   binary_loaded?: boolean;
   multiclass_model?: string | null;
   binary_model?: string | null;
+  binary_model_source?: string;
+  severity_model_source?: string;
 };
 
 type BackendStatus = {
@@ -172,6 +175,9 @@ type ScreeningResult = {
   probabilities?: Record<string, number>;
   screening?: ScreeningTier | null;
   screening_recommendation: string;
+  consistency_status?: string;
+  raw_binary_prediction?: number | null;
+  raw_severity_prediction?: number | null;
 };
 
 type DetectionFinding = {
@@ -206,6 +212,10 @@ type AnalyzeResponse = {
   recommendation?: string;
   model_type?: string;
   model_version?: string;
+  model_mode?: string;
+  consistency_status?: string;
+  raw_binary_prediction?: number | null;
+  raw_severity_prediction?: number | null;
   clinical_basis?: ClinicalBasisItem[];
   detected_supported_findings?: string[];
   not_directly_assessed_findings?: string[];
@@ -352,7 +362,7 @@ const getFileName = (path: string): string => path.split('/').pop() ?? 'image';
 const formatNumber = (value: number, decimals = 1): string =>
   Number.isFinite(value) ? value.toFixed(decimals) : '0.0';
 
-const CLASS_LABELS: Record<number, string> = {
+export const CLASS_LABELS: Record<number, string> = {
   0: 'No apparent diabetic retinopathy',
   1: 'Mild non-proliferative diabetic retinopathy',
   2: 'Moderate non-proliferative diabetic retinopathy',
@@ -360,25 +370,36 @@ const CLASS_LABELS: Record<number, string> = {
   4: 'Proliferative diabetic retinopathy',
 };
 
-const formatClassValue = (stage: number | null): string =>
-  stage === null ? 'Not classifiable' : CLASS_LABELS[stage] ?? `DR grade ${stage}`;
+export const formatClassValue = (stage: number | null): string =>
+  stage === null
+    ? 'Not classifiable'
+    : CLASS_LABELS[stage] ?? 'Medical severity label unavailable';
 
 const getMedicalLabel = (analysis: AnalyzeResponse): string =>
+  analysis.severity_label_medical ||
   analysis.medical_label ||
   analysis.result.medical_label ||
   analysis.result.stage_label ||
   formatClassValue(analysis.result.stage);
 
-const getScreeningLabel = (analysis: AnalyzeResponse): string =>
-  analysis.screening_label ||
-  (analysis.result.referable
-    ? 'Referable diabetic retinopathy suspected'
-    : 'No referable diabetic retinopathy detected');
+const getScreeningLabel = (analysis: AnalyzeResponse): string => {
+  if (analysis.referable_result) {
+    return analysis.referable_result;
+  }
+  if (analysis.screening_result === 'referable_review') {
+    return 'Referable / Needs ophthalmologist review';
+  }
+  return analysis.result.referable ? 'Referable DR' : 'Non-referable DR';
+};
 
 const getScreeningResultKind = (
   analysis: AnalyzeResponse,
 ): 'referable' | 'non_referable' | 'uncertain' => {
   if (analysis.screening_result === 'referable') {
+    return 'referable';
+  }
+
+  if (analysis.screening_result === 'referable_review') {
     return 'referable';
   }
 
@@ -547,9 +568,9 @@ const getScreeningStatus = (analysis: AnalyzeResponse): ScreeningTier => {
   }
 
   return {
-    status: analysis.result.referable ? 'Referable' : 'Non-Referable',
+    status: analysis.result.referable ? 'Referable DR' : 'Non-referable DR',
     referable: analysis.result.referable,
-    rule: 'Fallback screening mapping from the returned DR grade.',
+    rule: 'Fallback screening mapping from the supporting severity assessment.',
     recommendation: analysis.result.referable
       ? 'Referable diabetic retinopathy detected. Specialist evaluation recommended.'
       : 'No significant referable diabetic retinopathy findings detected. Routine ophthalmology follow-up recommended after clinician review.',
@@ -558,21 +579,6 @@ const getScreeningStatus = (analysis: AnalyzeResponse): ScreeningTier => {
 
 const isRuleBasedResult = (result: ScreeningResult): boolean =>
   !result.model_type || result.model_type === 'rule_based';
-
-const getModelTypeLabel = (modelType?: string): string => {
-  switch (modelType) {
-    case 'ophthalmologist_demo_hybrid':
-      return 'Ophthalmologist demo hybrid';
-    case 'ophthalmologist_demo_hybrid_unavailable':
-      return 'Ophthalmologist demo hybrid unavailable';
-    case 'dual_tier_handcrafted_features':
-      return 'Dual-tier ML screening';
-    case 'rule_based':
-      return 'Rule-based fallback';
-    default:
-      return modelType?.replace(/_/g, ' ') ?? 'Unknown model';
-  }
-};
 
 const formatPercent = (value: number): string =>
   `${formatNumber(value, 1)}%`;
@@ -587,12 +593,12 @@ const getBackendModelSummary = (models?: BackendModelStatus): string | null => {
     return null;
   }
 
-  if (models.model_mode === 'ophthalmologist_demo_hybrid') {
-    return `Ophthalmologist demo hybrid mode ${models.demo_hybrid_ready ? 'ready' : 'waiting for artifacts'}.`;
+  if (models.dual_model_ready || models.demo_hybrid_ready) {
+    return 'Screening and supporting severity models are ready.';
   }
 
   if (models.dual_tier_ready) {
-    return `ML models loaded (${models.multiclass_model ?? 'grading'} + ${models.binary_model ?? 'screening'}).`;
+    return 'Screening models are ready.';
   }
 
   if (models.multiclass_loaded || models.binary_loaded) {
@@ -601,7 +607,9 @@ const getBackendModelSummary = (models?: BackendModelStatus): string | null => {
       models.binary_loaded ? models.binary_model ?? 'screening model' : null,
     ].filter(Boolean);
 
-    return `Partial ML load: ${loaded.join(' + ')}.`;
+    return loaded.length > 0
+      ? 'Some analysis models are unavailable.'
+      : 'Analysis models are unavailable.';
   }
 
   return 'No trained ML models loaded on the backend.';
@@ -1421,7 +1429,7 @@ export default function App(): React.JSX.Element {
                     isSelected && styles.stageOptionTextSelected,
                   ]}
                 >
-                  {stage}
+                  {CLASS_LABELS[stage]}
                 </Text>
               </TouchableOpacity>
             );
@@ -1436,14 +1444,14 @@ export default function App(): React.JSX.Element {
             }}
             activeOpacity={0.75}
           >
-            <Text style={styles.primaryButtonText}>Confirm Estimate</Text>
+            <Text style={styles.primaryButtonText}>Confirm Assessment</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.secondaryButton, styles.buttonFlex]}
             onPress={() => setOverrideConfirmed(true)}
             activeOpacity={0.75}
           >
-            <Text style={styles.secondaryButtonText}>Save Manual Grade</Text>
+            <Text style={styles.secondaryButtonText}>Save Manual Assessment</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.auditText}>{auditText}</Text>
@@ -1536,7 +1544,7 @@ export default function App(): React.JSX.Element {
 
     return (
       <View style={styles.summaryPanel}>
-        <Text style={styles.sectionTitle}>Not Directly Assessed</Text>
+        <Text style={styles.sectionTitle}>Limitations</Text>
         {notAssessed.map(item => (
           <Text key={item} style={styles.reviewDisclaimer}>
             {item}
@@ -1545,6 +1553,16 @@ export default function App(): React.JSX.Element {
       </View>
     );
   };
+
+  const renderClinicalNoteCard = (analysis: AnalyzeResponse) => (
+    <View style={styles.summaryPanel}>
+      <Text style={styles.sectionTitle}>Clinical Note</Text>
+      <Text style={styles.reviewDisclaimer}>
+        {analysis.clinical_note ??
+          'This result is for screening support only and is not a final diagnosis. Please confirm with an ophthalmologist.'}
+      </Text>
+    </View>
+  );
 
   const renderRecommendationCard = (analysis: AnalyzeResponse) => (
     <View style={styles.summaryPanel}>
@@ -1614,16 +1632,13 @@ export default function App(): React.JSX.Element {
 
     return (
       <View style={styles.summaryPanel}>
-        <Text style={styles.sectionTitle}>ML Model Insights</Text>
-        <Text style={styles.modelTypeText}>
-          {getModelTypeLabel(result.model_type)}
-        </Text>
+        <Text style={styles.sectionTitle}>Screening Details</Text>
         <Text style={styles.modelMetricText}>
           Referable probability: {formatPercent(result.dr_probability)}
         </Text>
         {screeningEntries.length > 0 && (
           <>
-            <Text style={styles.probabilityGroupTitle}>Screening tier</Text>
+            <Text style={styles.probabilityGroupTitle}>Screening probabilities</Text>
             {screeningEntries.map(entry =>
               renderProbabilityRow(entry.label, entry.value),
             )}
@@ -1631,53 +1646,12 @@ export default function App(): React.JSX.Element {
         )}
         {stageEntries.length > 0 && (
           <>
-            <Text style={styles.probabilityGroupTitle}>DR classification probabilities</Text>
+            <Text style={styles.probabilityGroupTitle}>Supporting severity probabilities</Text>
             {stageEntries.map(entry =>
               renderProbabilityRow(entry.label, entry.value),
             )}
           </>
         )}
-      </View>
-    );
-  };
-
-  const renderModelUpdateSummaryCard = (analysis: AnalyzeResponse) => {
-    const summary = analysis.model_update_summary;
-
-    if (!summary || Object.keys(summary).length === 0) {
-      return null;
-    }
-
-    const textValue = (key: string): string | null => {
-      const value = summary[key];
-      return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-        ? String(value)
-        : null;
-    };
-
-    const rows = [
-      ['Current model mode', textValue('current_model_mode')],
-      ['Dataset used', textValue('dataset_used')],
-      ['Split', textValue('split')],
-      ['CNN source', textValue('cnn_source')],
-      ['Best validation macro F1', textValue('best_current_validation_macro_f1')],
-      ['5-class hybrid model', textValue('hybrid_5class_model')],
-      ['Binary hybrid model', textValue('hybrid_binary_model')],
-      ['Rollback available', textValue('rollback_available')],
-    ].filter(([, value]) => value);
-
-    return (
-      <View style={styles.summaryPanel}>
-        <Text style={styles.sectionTitle}>Model Update Summary</Text>
-        {rows.map(([label, value]) => (
-          <Text key={label} style={styles.modelMetricText}>
-            {label}: {value}
-          </Text>
-        ))}
-        <Text style={styles.resultFinePrint}>
-          {textValue('metrics_note') ??
-            'Validation/research metrics, not clinical deployment validation.'}
-        </Text>
       </View>
     );
   };
@@ -1765,7 +1739,8 @@ export default function App(): React.JSX.Element {
                       selectedImage.analysis.result.dr_probability / 100) * 100,
                   )}
                   {'\n'}
-                  Possible DR classification: {getMedicalLabel(selectedImage.analysis)}
+                  Supporting Severity Assessment:{' '}
+                  {getMedicalLabel(selectedImage.analysis)}
                   {getGradeConfidencePercent(selectedImage.analysis) !== null
                     ? ` (${formatPercent(
                         getGradeConfidencePercent(selectedImage.analysis) ?? 0,
@@ -1797,9 +1772,9 @@ export default function App(): React.JSX.Element {
               {renderQualityCard(selectedImage.analysis)}
               {renderFindingsCard(selectedImage.analysis)}
               {renderClinicalBasisCard(selectedImage.analysis)}
+              {renderClinicalNoteCard(selectedImage.analysis)}
               {renderNotAssessedCard(selectedImage.analysis)}
               {renderModelInsightsCard(selectedImage.analysis)}
-              {renderModelUpdateSummaryCard(selectedImage.analysis)}
               {renderRecommendationCard(selectedImage.analysis)}
 
               {selectedImage.analysis.quality.is_acceptable && (
@@ -1883,7 +1858,7 @@ export default function App(): React.JSX.Element {
               </Text>
             </View>
             <View style={styles.metricBox}>
-              <Text style={styles.metricLabel}>Classification</Text>
+              <Text style={styles.metricLabel}>Severity assessment</Text>
               <Text style={styles.metricValue}>
                 {selectedImage.analysis?.quality.is_acceptable
                   ? getMedicalLabel(selectedImage.analysis)
@@ -2915,9 +2890,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 6,
   },
   overrideLabel: {
     color: '#789096',
@@ -2927,23 +2901,24 @@ const styles = StyleSheet.create({
   },
   overrideValue: {
     color: '#12323A',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
+    lineHeight: 20,
   },
   stageSelector: {
-    flexDirection: 'row',
     gap: 8,
     marginBottom: 12,
   },
   stageOption: {
-    flex: 1,
-    minHeight: 42,
+    minHeight: 48,
     borderRadius: 8,
     backgroundColor: '#F3F9F7',
     borderColor: '#CFE3DE',
     borderWidth: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   stageOptionSelected: {
     backgroundColor: '#0E7C7B',
@@ -2951,8 +2926,9 @@ const styles = StyleSheet.create({
   },
   stageOptionText: {
     color: '#0E5E63',
-    fontSize: 15,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
   },
   stageOptionTextSelected: {
     color: '#FFFFFF',

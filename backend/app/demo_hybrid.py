@@ -1,3 +1,4 @@
+import json
 import math
 import pickle
 from pathlib import Path
@@ -12,8 +13,20 @@ import config as ml_config
 from app.schemas import FeatureReport, ScreeningResult
 
 
-DEMO_DIR = ml_config.DEMO_OPHTHALMOLOGIST_DIR
-DEMO_MODELS_DIR = DEMO_DIR / "models"
+FULL_TRAINING_DIR = ml_config.RESULTS_DIR / "full_hybrid_cnn_appdr_full_training"
+SEVERITY_MODEL_PATH = FULL_TRAINING_DIR / "hybrid_5class_best_model.pkl"
+CNN_CHECKPOINT_PATH = (
+    FULL_TRAINING_DIR
+    / "cnn_sources"
+    / "efficientnet_b3_full_training"
+    / "best_model.pt"
+)
+BINARY_MODEL_PATH = ml_config.RESULTS_DIR / "binary" / "best_model.pkl"
+BINARY_METADATA_PATH = ml_config.RESULTS_DIR / "binary" / "best_model_metadata.json"
+BINARY_THRESHOLD_PATH = ml_config.RESULTS_DIR / "binary" / "optimal_threshold.json"
+DEFAULT_BINARY_THRESHOLD = 0.20
+SCREENING_MODEL_SOURCE = "appdr_binary_svm"
+SEVERITY_MODEL_SOURCE = "full_training_hybrid_5class_xgboost"
 CNN_SOURCE_ID = "efficientnet_b3_full_training"
 CNN_INPUT_SIZE = 384
 CNN_BACKBONE = "efficientnet_b3"
@@ -47,50 +60,99 @@ def classify_demo_hybrid(
     threshold = float(binary_payload.get("threshold") or 0.5)
     referable = bool(referable_score >= threshold)
     non_referable_score = float(np.clip(1.0 - referable_score, 0.0, 1.0))
-    medical_label = ml_config.CLASS_NAMES.get(stage, f"DR grade {stage}")
+    medical_label = ml_config.CLASS_NAMES.get(stage, "Medical severity label unavailable")
     probabilities = {
         ml_config.CLASS_NAMES[label]: float(stage_probabilities.get(label, 0.0))
         for label in [0, 1, 2, 3, 4]
     }
     probabilities["Non-Referable"] = non_referable_score
     probabilities["Referable"] = float(np.clip(referable_score, 0.0, 1.0))
-    screening_status = "Referable" if referable else "Non-Referable"
+    consistency = resolve_dual_model_screening(referable, stage)
+    final_referable = bool(consistency["referable"])
+    screening_status = str(consistency["label"])
+    recommendation = str(consistency["recommendation"])
     screening = {
         "status": screening_status,
-        "referable": referable,
-        "rule": f"Hybrid demo binary threshold {threshold:.2f}",
-        "recommendation": (
-            "Referable DR suspected - ophthalmology evaluation recommended."
-            if referable
-            else "No urgent referral indicated by the demo model; confirm with an ophthalmologist."
+        "referable": final_referable,
+        "rule": (
+            f"Production binary screening threshold {threshold:.2f}; "
+            "severity grades 2-4 require referable review."
         ),
+        "recommendation": recommendation,
     }
 
     return ScreeningResult(
         classification=f"{screening_status}: {medical_label}",
-        referable=referable,
+        referable=final_referable,
         dr_probability=round(float(referable_score) * 100.0, 1),
         stage=stage,
         stage_label=medical_label,
         medical_label=medical_label,
         explanation=ml_config.CLASS_EXPLANATIONS.get(stage, medical_label),
-        recommendation=str(screening["recommendation"]),
+        recommendation=recommendation,
         reason=(
-            "Ophthalmologist demo hybrid pipeline used AppDR 203 handcrafted "
-            "features plus EfficientNet-B3 CNN prediction and PCA embedding features. "
-            "This is a research/demo mode, not final clinical validation."
+            "Task-specific routing used the production AppDR binary screening model "
+            "for referable screening and the full-training severity model with "
+            "handcrafted and image-derived prediction features for severity support."
         ),
         disclaimer=(
             "This result is an automated screening support output and is not a "
             "final diagnosis. Please confirm with an ophthalmologist."
         ),
-        model_type="ophthalmologist_demo_hybrid",
+        model_type=ml_config.DUAL_MODEL_MODE,
         confidence=stage_confidence,
         confidence_label=confidence_label(stage_confidence),
         probabilities=probabilities,
         screening=screening,
-        screening_recommendation=str(screening["recommendation"]),
+        screening_recommendation=recommendation,
+        consistency_status=str(consistency["status"]),
+        raw_binary_prediction=int(referable),
+        raw_severity_prediction=stage,
+        binary_model_source=SCREENING_MODEL_SOURCE,
+        severity_model_source=SEVERITY_MODEL_SOURCE,
     )
+
+
+def resolve_dual_model_screening(
+    binary_referable: bool,
+    severity_grade: int,
+) -> dict[str, object]:
+    severity_requires_referral = severity_grade >= 2
+    if binary_referable != severity_requires_referral:
+        status = (
+            "severity_escalation"
+            if severity_requires_referral
+            else "screening_severity_disagreement"
+        )
+        return {
+            "status": status,
+            "referable": True,
+            "result": "referable_review",
+            "label": "Referable / Needs ophthalmologist review",
+            "recommendation": (
+                "The screening and severity outputs require clinical confirmation."
+            ),
+        }
+
+    if binary_referable:
+        return {
+            "status": "aligned",
+            "referable": True,
+            "result": "referable",
+            "label": "Referable DR",
+            "recommendation": "Ophthalmology evaluation is recommended.",
+        }
+
+    return {
+        "status": "aligned",
+        "referable": False,
+        "result": "non_referable",
+        "label": "Non-referable DR",
+        "recommendation": (
+            "Continue routine eye care and confirm the screening result with an "
+            "ophthalmologist."
+        ),
+    }
 
 
 def load_demo_bundle() -> dict[str, Any] | None:
@@ -100,10 +162,9 @@ def load_demo_bundle() -> dict[str, Any] | None:
 
     _DEMO_LOAD_ATTEMPTED = True
     paths = {
-        "five_model": DEMO_MODELS_DIR / "hybrid_5class_best_model.pkl",
-        "binary_model": DEMO_MODELS_DIR / "hybrid_binary_best_model.pkl",
-        "cnn_checkpoint": DEMO_MODELS_DIR / "cnn_best_model.pt",
-        "pca": DEMO_MODELS_DIR / "embedding_pca.pkl",
+        "five_model": SEVERITY_MODEL_PATH,
+        "binary_model": BINARY_MODEL_PATH,
+        "cnn_checkpoint": CNN_CHECKPOINT_PATH,
     }
     if not all(path.exists() for path in paths.values()):
         _DEMO_BUNDLE = None
@@ -113,18 +174,37 @@ def load_demo_bundle() -> dict[str, Any] | None:
         five_model = pickle.load(file)
     with paths["binary_model"].open("rb") as file:
         binary_model = pickle.load(file)
-    with paths["pca"].open("rb") as file:
-        pca = pickle.load(file)
+    binary_metadata = load_json(BINARY_METADATA_PATH)
+    binary_features = binary_metadata.get("feature_names", ml_config.FEATURE_NAMES)
+    if not isinstance(binary_features, list) or not all(
+        isinstance(name, str) for name in binary_features
+    ):
+        binary_features = list(ml_config.FEATURE_NAMES)
+    threshold_payload = load_json(BINARY_THRESHOLD_PATH)
+    threshold = float(threshold_payload.get("threshold", DEFAULT_BINARY_THRESHOLD))
 
     _DEMO_BUNDLE = {
         "five_model": five_model,
-        "binary_model": binary_model,
-        "pca": pca,
+        "binary_model": {
+            "model": binary_model,
+            "features": binary_features,
+            "threshold": threshold,
+        },
         "cnn_checkpoint": paths["cnn_checkpoint"],
         "cnn_model": None,
         "device": None,
     }
     return _DEMO_BUNDLE
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def build_demo_feature_row(
@@ -133,11 +213,8 @@ def build_demo_feature_row(
     bundle: dict[str, Any],
 ) -> dict[str, float]:
     row = {name: float((features.expanded_features or {}).get(name, 0.0)) for name in ml_config.FEATURE_NAMES}
-    cnn_row, embedding = infer_demo_cnn(image_bgr, bundle)
+    cnn_row, _embedding = infer_demo_cnn(image_bgr, bundle)
     row.update(cnn_row)
-    reduced = bundle["pca"].transform(embedding.reshape(1, -1))[0]
-    for idx, value in enumerate(reduced):
-        row[f"cnn_embed_{CNN_SOURCE_ID}_pca128_{idx:03d}"] = float(value)
     return row
 
 

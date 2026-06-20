@@ -168,6 +168,11 @@ class ScreeningResult(BaseModel):
     probabilities: dict[str, float] = Field(default_factory=dict)
     screening: ScreeningTier | None = None
     screening_recommendation: str = ""
+    consistency_status: str = "aligned"
+    raw_binary_prediction: int | None = None
+    raw_severity_prediction: int | None = None
+    binary_model_source: str = ""
+    severity_model_source: str = ""
 
 
 class AnalyzeResponse(BaseModel):
@@ -189,6 +194,12 @@ class AnalyzeResponse(BaseModel):
     recommendation: str = ""
     model_type: str = ""
     model_version: str = "production_handcrafted_203"
+    model_mode: str = ""
+    binary_model_source: str = ""
+    severity_model_source: str = ""
+    consistency_status: str = "aligned"
+    raw_binary_prediction: int | None = None
+    raw_severity_prediction: int | None = None
     clinical_basis: list[ClinicalBasisItem] = Field(default_factory=list)
     detected_supported_findings: list[str] = Field(default_factory=list)
     not_directly_assessed_findings: list[str] = Field(default_factory=list)

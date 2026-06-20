@@ -10,9 +10,17 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 RESULTS_DIR = BASE_DIR / "results"
-MODEL_MODE = os.getenv("MODEL_MODE", "ophthalmologist_demo_hybrid").strip().lower()
+DUAL_MODEL_MODE = "dual_model_screening_hybrid_severity"
+LEGACY_DEMO_HYBRID_MODE = "ophthalmologist_demo_hybrid"
+DUAL_MODEL_MODES = {DUAL_MODEL_MODE, LEGACY_DEMO_HYBRID_MODE}
+MODEL_MODE = os.getenv("MODEL_MODE", DUAL_MODEL_MODE).strip().lower()
 DEMO_OPHTHALMOLOGIST_DIR = RESULTS_DIR / "demo_ophthalmologist_update"
-DEMO_HYBRID_MODE = "ophthalmologist_demo_hybrid"
+# Backward-compatible name retained for older imports.
+DEMO_HYBRID_MODE = DUAL_MODEL_MODE
+
+
+def uses_dual_model_mode() -> bool:
+    return MODEL_MODE in DUAL_MODEL_MODES
 
 FEATURES_CSV = BASE_DIR / "features.csv"
 FAILED_SAMPLES_TXT = BASE_DIR / "failed_samples.txt"
