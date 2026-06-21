@@ -46,6 +46,24 @@ test('renders correctly', async () => {
   });
 });
 
+test('shows capture and fundus upload actions on the main screen', async () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(<App />);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const rendered = JSON.stringify(renderer.toJSON());
+  expect(rendered).toContain('Capture Image');
+  expect(rendered).toContain('Upload Fundus Image');
+
+  await ReactTestRenderer.act(async () => {
+    renderer.unmount();
+  });
+});
+
 test('uses medical severity labels without numeric class wording', () => {
   expect(CLASS_LABELS).toEqual({
     0: 'No apparent diabetic retinopathy',

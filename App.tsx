@@ -32,6 +32,7 @@ type CapturedImage = {
   uri: string;
   analysisPath: string;
   analysisUri: string;
+  fileName: string;
   mimeType: string;
   savedUri: string | null;
   savedAt: string;
@@ -48,10 +49,10 @@ type ImageCropModule = {
 };
 
 type PickedImage = {
-  filePath: string;
-  fileUri: string;
-  name: string;
-  type: string;
+  filePath?: string;
+  fileUri?: string;
+  name?: string;
+  type?: string;
 };
 
 type ImagePickerModule = {
@@ -355,9 +356,10 @@ const needsLegacyStoragePermission = (): boolean =>
   Platform.OS === 'android' && Number(Platform.Version) < 29;
 
 const toFileUri = (path: string): string =>
-  path.startsWith('file://') ? path : `file://${path}`;
+  path.includes('://') ? path : `file://${path}`;
 
-const getFileName = (path: string): string => path.split('/').pop() ?? 'image';
+const getFileName = (path?: string): string =>
+  path?.split(/[\\/]/).pop()?.split('?')[0] || 'uploaded_fundus.jpg';
 
 const formatNumber = (value: number, decimals = 1): string =>
   Number.isFinite(value) ? value.toFixed(decimals) : '0.0';
@@ -497,9 +499,7 @@ const getAnalyzeErrorMessage = (error: unknown): string => {
   const lower = message.toLowerCase();
 
   if (isNetworkRequestError(error)) {
-    return `Cannot reach the analysis backend. Tried ${API_BASE_URLS.join(
-      ', ',
-    )}. Keep FastAPI running on port 8000. For USB testing, keep the phone plugged in and keep the port bridge active.`;
+    return 'Unable to connect to analysis server. Please check the backend connection.';
   }
 
   if (
@@ -511,6 +511,19 @@ const getAnalyzeErrorMessage = (error: unknown): string => {
   }
 
   return 'Analysis could not be completed. Please retake the image or try again.';
+};
+
+const isImagePickerCancellation = (error: unknown): boolean => {
+  const pickerError = error as { code?: unknown; message?: unknown } | null;
+  const code =
+    typeof pickerError?.code === 'string' ? pickerError.code.toLowerCase() : '';
+  const message = getErrorMessage(error).toLowerCase();
+
+  return (
+    code === 'picker_cancelled' ||
+    message.includes('no image was selected') ||
+    message.includes('picker cancelled')
+  );
 };
 
 const fetchWithTimeout = async (
@@ -662,8 +675,8 @@ const createAnalyzeFormData = (image: CapturedImage): FormData => {
     'file',
     {
       uri: image.analysisUri,
-      name: getFileName(image.analysisPath),
-      type: image.mimeType,
+      name: image.fileName || getFileName(image.analysisPath),
+      type: image.mimeType || 'image/jpeg',
     } as unknown as Blob,
   );
 
@@ -757,12 +770,6 @@ export default function App(): React.JSX.Element {
     },
     [],
   );
-
-  useEffect(() => {
-    if (screen === 'capture') {
-      checkGalleryPermission();
-    }
-  }, [checkGalleryPermission, screen]);
 
   const savePhotoToGallery = useCallback(
     async (photoPath: string): Promise<string | null> => {
@@ -1011,6 +1018,7 @@ export default function App(): React.JSX.Element {
         uri: toFileUri(photoPath),
         analysisPath,
         analysisUri: toFileUri(analysisPath),
+        fileName: getFileName(analysisPath),
         mimeType: 'image/jpeg',
         savedUri,
         savedAt: new Date().toLocaleString(),
@@ -1019,8 +1027,8 @@ export default function App(): React.JSX.Element {
 
       setSelectedImage(capturedImage);
       setHistory(current => [capturedImage, ...current].slice(0, 12));
+      setAnalysisError(null);
       setScreen('result');
-      analyzeImage(capturedImage);
     } catch (error) {
       console.error('Capture error:', error);
       Alert.alert(
@@ -1038,10 +1046,8 @@ export default function App(): React.JSX.Element {
     }
 
     if (Platform.OS !== 'android' || !imagePicker) {
-      Alert.alert(
-        'Upload Not Available',
-        'Image upload is currently available in the Android build. Rebuild the app after this update.',
-      );
+      console.error('DRImagePicker native module is unavailable.');
+      Alert.alert('Upload Failed', 'Image upload failed. Please try again.');
       return;
     }
 
@@ -1049,12 +1055,22 @@ export default function App(): React.JSX.Element {
 
     try {
       const picked = await imagePicker.pickImage();
+      const pickedPath = picked.filePath || picked.fileUri;
+      const pickedUri =
+        picked.fileUri ||
+        (picked.filePath ? toFileUri(picked.filePath) : undefined);
+
+      if (!pickedPath || !pickedUri) {
+        throw new Error('Selected image did not include a readable file URI.');
+      }
+
       const uploadedImage: CapturedImage = {
         id: `${Date.now()}`,
-        path: picked.filePath,
-        uri: picked.fileUri,
-        analysisPath: picked.filePath,
-        analysisUri: picked.fileUri,
+        path: pickedPath,
+        uri: pickedUri,
+        analysisPath: pickedPath,
+        analysisUri: pickedUri,
+        fileName: picked.name || getFileName(pickedPath),
         mimeType: picked.type || 'image/jpeg',
         savedUri: null,
         savedAt: new Date().toLocaleString(),
@@ -1065,17 +1081,15 @@ export default function App(): React.JSX.Element {
       setHistory(current => [uploadedImage, ...current].slice(0, 12));
       setAnalysisError(null);
       setScreen('result');
-      analyzeImage(uploadedImage);
     } catch (error) {
-      const message = getErrorMessage(error);
-
-      if (!message.toLowerCase().includes('no image was selected')) {
-        Alert.alert('Upload Failed', message);
+      if (!isImagePickerCancellation(error)) {
+        console.error('Upload error:', error);
+        Alert.alert('Upload Failed', 'Image upload failed. Please try again.');
       }
     } finally {
       setIsPickingImage(false);
     }
-  }, [analyzeImage, isPickingImage]);
+  }, [isPickingImage]);
 
   const openHistoryImage = useCallback((image: CapturedImage) => {
     setSelectedImage(image);
@@ -1197,7 +1211,7 @@ export default function App(): React.JSX.Element {
           <Text style={styles.panelText}>
             {selectedImage
               ? selectedImage.savedAt
-              : 'Capture a retinal image to begin a screening record.'}
+              : 'Capture a retinal image or choose an existing fundus image.'}
           </Text>
         </View>
         <View style={styles.buttonRow}>
@@ -1206,7 +1220,7 @@ export default function App(): React.JSX.Element {
             onPress={openCapture}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>Capture</Text>
+            <Text style={styles.primaryButtonText}>Capture Image</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.secondaryButton, styles.buttonFlex]}
@@ -1215,7 +1229,7 @@ export default function App(): React.JSX.Element {
             activeOpacity={0.8}
           >
             <Text style={styles.secondaryButtonText}>
-              {isPickingImage ? 'Opening' : 'Upload'}
+              {isPickingImage ? 'Opening Image Picker' : 'Upload Fundus Image'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1277,9 +1291,7 @@ export default function App(): React.JSX.Element {
 
   const renderCapture = () => {
     const isCaptureDisabled =
-      !isCameraInitialized ||
-      isCapturing ||
-      (needsLegacyStoragePermission() && !hasGalleryPermission);
+      !isCameraInitialized || isCapturing;
 
     if (!device) {
       return (
@@ -1715,7 +1727,7 @@ export default function App(): React.JSX.Element {
                 ? 'The system is checking image quality, enhancing the retinal image, segmenting vessels, detecting lesions, extracting classical features, and preparing a screening-support result.'
                 : selectedImage.analysis
                   ? getPlainExplanation(selectedImage.analysis)
-                  : 'Capture or upload an image to begin automated screening support.'}
+                  : 'Review the selected fundus image, then tap Analyze Image.'}
             </Text>
             {selectedImage.analysis && (
               <View style={styles.resultSummaryRow}>
@@ -1752,6 +1764,22 @@ export default function App(): React.JSX.Element {
               </View>
             )}
           </View>
+          {!selectedImage.analysis && (
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                styles.analyzeButton,
+                isAnalyzing && styles.compactButtonDisabled,
+              ]}
+              onPress={() => analyzeImage(selectedImage)}
+              disabled={isAnalyzing}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.primaryButtonText}>
+                {isAnalyzing ? 'Analyzing Image' : 'Analyze Image'}
+              </Text>
+            </TouchableOpacity>
+          )}
           {isAnalyzing && (
             <View style={styles.skeletonPanel}>
               <View style={styles.skeletonLineWide} />
@@ -1877,12 +1905,24 @@ export default function App(): React.JSX.Element {
             </View>
           </View>
           {selectedImage.analysis && renderSpecialistOverride(selectedImage.analysis)}
-          <View style={styles.actionRow}>
+          <Text style={styles.sectionTitle}>Retake / Choose Another Image</Text>
+          <View style={styles.buttonRow}>
             <TouchableOpacity
               style={[styles.primaryButton, styles.buttonFlex]}
               onPress={openCapture}
             >
-              <Text style={styles.primaryButtonText}>Retake</Text>
+              <Text style={styles.primaryButtonText}>Capture Image</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.buttonFlex]}
+              onPress={uploadImage}
+              disabled={isPickingImage}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {isPickingImage
+                  ? 'Opening Image Picker'
+                  : 'Upload Fundus Image'}
+              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -1894,14 +1934,16 @@ export default function App(): React.JSX.Element {
               style={[styles.primaryButton, styles.buttonFlex]}
               onPress={openCapture}
             >
-              <Text style={styles.primaryButtonText}>Capture</Text>
+              <Text style={styles.primaryButtonText}>Capture Image</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.secondaryButton, styles.buttonFlex]}
               onPress={uploadImage}
               disabled={isPickingImage}
             >
-              <Text style={styles.secondaryButtonText}>Upload</Text>
+              <Text style={styles.secondaryButtonText}>
+                Upload Fundus Image
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1920,14 +1962,16 @@ export default function App(): React.JSX.Element {
               style={[styles.primaryButton, styles.buttonFlex]}
               onPress={openCapture}
             >
-              <Text style={styles.primaryButtonText}>Capture</Text>
+              <Text style={styles.primaryButtonText}>Capture Image</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.secondaryButton, styles.buttonFlex]}
               onPress={uploadImage}
               disabled={isPickingImage}
             >
-              <Text style={styles.secondaryButtonText}>Upload</Text>
+              <Text style={styles.secondaryButtonText}>
+                Upload Fundus Image
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2100,10 +2144,16 @@ const styles = StyleSheet.create({
   buttonRow: {
     width: '100%',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   buttonFlex: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 160,
+  },
+  analyzeButton: {
+    width: '100%',
+    marginBottom: 14,
   },
   secondaryButton: {
     minHeight: 48,
@@ -2753,6 +2803,7 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   summaryPanel: {
