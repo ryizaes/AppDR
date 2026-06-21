@@ -1,6 +1,8 @@
 import unittest
 
 from app.demo_hybrid import resolve_dual_model_screening
+from app.pipeline import build_screening_response_fields
+from app.schemas import QualityReport, ScreeningResult
 
 
 class DualModelConsistencyTests(unittest.TestCase):
@@ -27,6 +29,46 @@ class DualModelConsistencyTests(unittest.TestCase):
         self.assertEqual(
             result["recommendation"],
             "The screening and severity outputs require clinical confirmation.",
+        )
+
+    def test_low_quality_result_does_not_report_false_zero_probability(self) -> None:
+        result = self.screening_result(model_type="dual_model_screening_hybrid_severity")
+        fields = build_screening_response_fields(result, self.quality(False))
+        self.assertEqual(fields["screening_result"], "uncertain")
+        self.assertIsNone(fields["referable_probability"])
+        self.assertIsNone(fields["screening_confidence"])
+
+    def test_unavailable_models_do_not_fall_back_to_non_referable(self) -> None:
+        result = self.screening_result(model_type="dual_model_unavailable")
+        fields = build_screening_response_fields(result, self.quality(True))
+        self.assertEqual(fields["screening_result"], "uncertain")
+        self.assertEqual(fields["screening_label"], "Analysis models unavailable")
+        self.assertIsNone(fields["referable_probability"])
+
+    @staticmethod
+    def quality(is_acceptable: bool) -> QualityReport:
+        return QualityReport(
+            is_acceptable=is_acceptable,
+            blur_score=100.0,
+            brightness_mean=100.0,
+            contrast_std=30.0,
+            fundus_area_ratio=0.8,
+        )
+
+    @staticmethod
+    def screening_result(model_type: str) -> ScreeningResult:
+        return ScreeningResult(
+            classification="Unavailable",
+            referable=False,
+            dr_probability=0.0,
+            stage=None,
+            stage_label="Medical severity assessment unavailable",
+            explanation="Required artifacts were not loaded.",
+            recommendation="Check model artifacts.",
+            reason="Test fixture",
+            disclaimer="Screening support only.",
+            model_type=model_type,
+            probabilities={"Non-Referable": 1.0, "Referable": 0.0},
         )
 
 

@@ -560,6 +560,43 @@ def build_screening_response_fields(
     The binary referable model is the primary screening signal. The 5-class DR
     grade remains a supporting estimate, not a final diagnosis.
     """
+    disclaimer = (
+        "This app is a screening support tool only and does not provide a final "
+        "medical diagnosis. Please consult an ophthalmologist for confirmation."
+    )
+
+    if not quality.is_acceptable:
+        return {
+            "screening_result": "uncertain",
+            "screening_label": "Uncertain screening result",
+            "screening_confidence": None,
+            "screening_confidence_level": "low",
+            "referable_probability": None,
+            "non_referable_probability": None,
+            "explanation": (
+                "The result is uncertain because the retinal image quality is low. "
+                "Please retake the image before relying on screening output."
+            ),
+            "recommendation": (
+                "Uncertain result - retake the image in better focus and lighting, "
+                "or consult an ophthalmologist."
+            ),
+            "disclaimer": disclaimer,
+        }
+
+    if result.model_type == "dual_model_unavailable":
+        return {
+            "screening_result": "uncertain",
+            "screening_label": "Analysis models unavailable",
+            "screening_confidence": None,
+            "screening_confidence_level": "low",
+            "referable_probability": None,
+            "non_referable_probability": None,
+            "explanation": result.explanation,
+            "recommendation": result.recommendation,
+            "disclaimer": disclaimer,
+        }
+
     referable_probability = result.probabilities.get(
         "Referable",
         float(result.dr_probability) / 100.0,
@@ -572,30 +609,6 @@ def build_screening_response_fields(
     non_referable_probability = float(np.clip(non_referable_probability, 0.0, 1.0))
     screening_confidence = max(referable_probability, non_referable_probability)
     confidence_level = screening_confidence_level(screening_confidence)
-    disclaimer = (
-        "This app is a screening support tool only and does not provide a final "
-        "medical diagnosis. Please consult an ophthalmologist for confirmation."
-    )
-
-    if not quality.is_acceptable:
-        return {
-            "screening_result": "uncertain",
-            "screening_label": "Uncertain screening result",
-            "screening_confidence": screening_confidence,
-            "screening_confidence_level": "low",
-            "referable_probability": referable_probability,
-            "non_referable_probability": non_referable_probability,
-            "explanation": (
-                "The result is uncertain because the retinal image quality is low. "
-                "Please retake the image before relying on screening output."
-            ),
-            "recommendation": (
-                "Uncertain result - retake the image in better focus and lighting, "
-                "or consult an ophthalmologist."
-            ),
-            "disclaimer": disclaimer,
-        }
-
     if result.consistency_status != "aligned":
         return {
             "screening_result": "referable_review",

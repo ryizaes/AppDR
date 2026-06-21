@@ -214,6 +214,8 @@ type AnalyzeResponse = {
   model_type?: string;
   model_version?: string;
   model_mode?: string;
+  binary_model_source?: string;
+  severity_model_source?: string;
   consistency_status?: string;
   raw_binary_prediction?: number | null;
   raw_severity_prediction?: number | null;
@@ -281,6 +283,7 @@ const imagePicker = NativeModules.DRImagePicker as
   | undefined;
 
 const LOCAL_NETWORK_API_BASE_URLS = ['http://192.168.1.12:8000'];
+const EXPECTED_MODEL_MODE = 'dual_model_screening_hybrid_severity';
 const HEALTH_CHECK_TIMEOUT_MS = 4000;
 const ANALYZE_TIMEOUT_MS = 25000;
 const STATUS_POLL_INTERVAL_MS = 1500;
@@ -385,11 +388,23 @@ const getMedicalLabel = (analysis: AnalyzeResponse): string =>
   formatClassValue(analysis.result.stage);
 
 const getScreeningLabel = (analysis: AnalyzeResponse): string => {
-  if (analysis.referable_result) {
-    return analysis.referable_result;
+  if (!analysis.quality.is_acceptable || analysis.screening_result === 'uncertain') {
+    return analysis.screening_label || 'Uncertain screening result';
   }
   if (analysis.screening_result === 'referable_review') {
     return 'Referable / Needs ophthalmologist review';
+  }
+  if (analysis.screening_result === 'referable') {
+    return 'Referable DR';
+  }
+  if (analysis.screening_result === 'non_referable') {
+    return 'Non-referable DR';
+  }
+  if (analysis.screening_label) {
+    return analysis.screening_label;
+  }
+  if (analysis.referable_result) {
+    return analysis.referable_result;
   }
   return analysis.result.referable ? 'Referable DR' : 'Non-referable DR';
 };
@@ -425,14 +440,41 @@ const getScreeningResultKind = (
 const getScreeningConfidencePercent = (
   analysis: AnalyzeResponse,
 ): number | null => {
-  const raw =
-    analysis.screening_confidence ??
-    Math.max(
-      analysis.referable_probability ?? analysis.result.dr_probability / 100,
-      analysis.non_referable_probability ??
-        1 - (analysis.result.dr_probability / 100),
+  if (!analysis.quality.is_acceptable) {
+    return null;
+  }
+  if (
+    analysis.screening_confidence !== null &&
+    analysis.screening_confidence !== undefined
+  ) {
+    return analysis.screening_confidence * 100;
+  }
+  if (
+    analysis.referable_probability !== null &&
+    analysis.referable_probability !== undefined &&
+    analysis.non_referable_probability !== null &&
+    analysis.non_referable_probability !== undefined
+  ) {
+    return (
+      Math.max(
+        analysis.referable_probability,
+        analysis.non_referable_probability,
+      ) * 100
     );
-  return raw === null || raw === undefined ? null : raw * 100;
+  }
+  return null;
+};
+
+const getReferableProbabilityPercent = (
+  analysis: AnalyzeResponse,
+): number | null => {
+  if (!analysis.quality.is_acceptable) {
+    return null;
+  }
+  const probability = analysis.referable_probability;
+  return probability === null || probability === undefined
+    ? null
+    : probability * 100;
 };
 
 const getScreeningConfidenceLevel = (analysis: AnalyzeResponse): string => {
@@ -443,7 +485,7 @@ const getScreeningConfidenceLevel = (analysis: AnalyzeResponse): string => {
 
   const confidence = getScreeningConfidencePercent(analysis);
   if (confidence === null) {
-    return 'Low';
+    return 'Unavailable';
   }
   if (confidence >= 80) {
     return 'High';
@@ -490,7 +532,12 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 const isNetworkRequestError = (error: unknown): boolean =>
-  ['network request failed', 'request timed out', 'aborted'].some(fragment =>
+  [
+    'network request failed',
+    'request timed out',
+    'aborted',
+    'incompatible analysis backend',
+  ].some(fragment =>
     getErrorMessage(error).toLowerCase().includes(fragment),
   );
 
@@ -600,6 +647,13 @@ const isHealthResponse = (
   value: unknown,
 ): value is { status: string; models?: BackendModelStatus } =>
   typeof value === 'object' && value !== null && 'status' in value;
+
+const isExpectedBackendModels = (models?: BackendModelStatus): boolean =>
+  models?.model_mode === EXPECTED_MODEL_MODE &&
+  models.dual_model_ready === true;
+
+const isExpectedAnalysisResponse = (analysis: AnalyzeResponse): boolean =>
+  analysis.model_mode === EXPECTED_MODEL_MODE;
 
 const getBackendModelSummary = (models?: BackendModelStatus): string | null => {
   if (!models) {
@@ -858,6 +912,11 @@ export default function App(): React.JSX.Element {
 
         const healthBody = await parseJsonResponse(response);
         const models = isHealthResponse(healthBody) ? healthBody.models : undefined;
+        if (!isExpectedBackendModels(models)) {
+          throw new Error(
+            'Incompatible analysis backend: expected the defense dual-model configuration.',
+          );
+        }
         const modelSummary = getBackendModelSummary(models);
 
         setActiveApiBaseUrl(apiBaseUrl);
@@ -933,6 +992,11 @@ export default function App(): React.JSX.Element {
             }
 
             if (isAnalyzeResponse(responseBody)) {
+              if (!isExpectedAnalysisResponse(responseBody)) {
+                throw new Error(
+                  'Incompatible analysis backend: response is not from the defense dual-model configuration.',
+                );
+              }
               applyAnalysisToImage(image.id, responseBody);
               return;
             }
@@ -953,6 +1017,11 @@ export default function App(): React.JSX.Element {
                 });
               },
             );
+            if (!isExpectedAnalysisResponse(analysis)) {
+              throw new Error(
+                'Incompatible analysis backend: response is not from the defense dual-model configuration.',
+              );
+            }
             applyAnalysisToImage(image.id, analysis);
             return;
           } catch (requestError) {
@@ -1746,10 +1815,11 @@ export default function App(): React.JSX.Element {
                       )}
                   {'\n'}
                   Referable probability{' '}
-                  {formatPercent(
-                    (selectedImage.analysis.referable_probability ??
-                      selectedImage.analysis.result.dr_probability / 100) * 100,
-                  )}
+                  {getReferableProbabilityPercent(selectedImage.analysis) === null
+                    ? 'Unavailable'
+                    : formatPercent(
+                        getReferableProbabilityPercent(selectedImage.analysis) ?? 0,
+                      )}
                   {'\n'}
                   Supporting Severity Assessment:{' '}
                   {getMedicalLabel(selectedImage.analysis)}
@@ -1899,7 +1969,11 @@ export default function App(): React.JSX.Element {
               <Text style={styles.metricLabel}>Referable risk</Text>
               <Text style={styles.metricValue}>
                 {selectedImage.analysis
-                  ? formatPercent(selectedImage.analysis.result.dr_probability)
+                  ? getReferableProbabilityPercent(selectedImage.analysis) === null
+                    ? 'Unavailable'
+                    : formatPercent(
+                        getReferableProbabilityPercent(selectedImage.analysis) ?? 0,
+                      )
                   : 'Waiting'}
               </Text>
             </View>
