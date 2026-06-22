@@ -536,14 +536,22 @@ const isNetworkRequestError = (error: unknown): boolean =>
     'network request failed',
     'request timed out',
     'aborted',
-    'incompatible analysis backend',
   ].some(fragment =>
     getErrorMessage(error).toLowerCase().includes(fragment),
   );
 
+const isBackendCompatibilityError = (error: unknown): boolean =>
+  getErrorMessage(error)
+    .toLowerCase()
+    .includes('incompatible analysis backend');
+
 const getAnalyzeErrorMessage = (error: unknown): string => {
   const message = getErrorMessage(error);
   const lower = message.toLowerCase();
+
+  if (isBackendCompatibilityError(error)) {
+    return 'The analysis server is running an outdated model configuration. Please restart the backend and try again.';
+  }
 
   if (isNetworkRequestError(error)) {
     return 'Unable to connect to analysis server. Please check the backend connection.';
@@ -651,6 +659,18 @@ const isHealthResponse = (
 const isExpectedBackendModels = (models?: BackendModelStatus): boolean =>
   models?.model_mode === EXPECTED_MODEL_MODE &&
   models.dual_model_ready === true;
+
+const describeBackendCompatibility = (models?: BackendModelStatus): string => {
+  if (!models) {
+    return 'model status was not reported';
+  }
+
+  const mode = models.model_mode ?? 'unknown mode';
+  const readiness = models.dual_model_ready
+    ? 'dual models ready'
+    : 'dual models not ready';
+  return `${mode}; ${readiness}`;
+};
 
 const isExpectedAnalysisResponse = (analysis: AnalyzeResponse): boolean =>
   analysis.model_mode === EXPECTED_MODEL_MODE;
@@ -890,7 +910,6 @@ export default function App(): React.JSX.Element {
 
   const checkBackendConnection = useCallback(async (): Promise<string | null> => {
     const candidates = getOrderedApiBaseUrls(activeApiBaseUrl);
-    let lastError: unknown = null;
 
     setBackendStatus({
       state: 'checking',
@@ -898,45 +917,65 @@ export default function App(): React.JSX.Element {
       message: 'Checking analysis backend...',
     });
 
-    for (const apiBaseUrl of candidates) {
-      try {
-        const response = await fetchWithTimeout(
-          `${apiBaseUrl}/health`,
-          { method: 'GET' },
-          HEALTH_CHECK_TIMEOUT_MS,
-        );
-
-        if (!response.ok) {
-          throw new Error(`Backend health check returned ${response.status}.`);
-        }
-
-        const healthBody = await parseJsonResponse(response);
-        const models = isHealthResponse(healthBody) ? healthBody.models : undefined;
-        if (!isExpectedBackendModels(models)) {
-          throw new Error(
-            'Incompatible analysis backend: expected the defense dual-model configuration.',
+    const probeResults = await Promise.all(
+      candidates.map(async apiBaseUrl => {
+        try {
+          const response = await fetchWithTimeout(
+            `${apiBaseUrl}/health`,
+            { method: 'GET' },
+            HEALTH_CHECK_TIMEOUT_MS,
           );
-        }
-        const modelSummary = getBackendModelSummary(models);
 
-        setActiveApiBaseUrl(apiBaseUrl);
-        setBackendStatus({
-          state: 'connected',
-          endpoint: apiBaseUrl,
-          message: modelSummary ?? 'Analysis backend is connected.',
-          checkedAt: formatCheckedAt(),
-          models,
-        });
-        return apiBaseUrl;
-      } catch (error) {
-        lastError = error;
-      }
+          if (!response.ok) {
+            throw new Error(`Backend health check returned ${response.status}.`);
+          }
+
+          const healthBody = await parseJsonResponse(response);
+          const models = isHealthResponse(healthBody)
+            ? healthBody.models
+            : undefined;
+          if (!isExpectedBackendModels(models)) {
+            throw new Error(
+              `Incompatible analysis backend at ${apiBaseUrl}: ${describeBackendCompatibility(
+                models,
+              )}.`,
+            );
+          }
+
+          return { apiBaseUrl, models, error: null };
+        } catch (error) {
+          return { apiBaseUrl, models: undefined, error };
+        }
+      }),
+    );
+
+    const compatible = probeResults.find(result => result.error === null);
+    if (compatible) {
+      const modelSummary = getBackendModelSummary(compatible.models);
+      setActiveApiBaseUrl(compatible.apiBaseUrl);
+      setBackendStatus({
+        state: 'connected',
+        endpoint: compatible.apiBaseUrl,
+        message: modelSummary ?? 'Analysis backend is connected.',
+        checkedAt: formatCheckedAt(),
+        models: compatible.models,
+      });
+      return compatible.apiBaseUrl;
     }
+
+    const incompatible = probeResults.find(result =>
+      isBackendCompatibilityError(result.error),
+    );
+    const message = incompatible
+      ? `${getErrorMessage(
+          incompatible.error,
+        )} Restart the backend with the current AppDR configuration.`
+      : 'Analysis server was not reached. Start the backend on the laptop and confirm the phone and laptop are on the same network.';
 
     setBackendStatus({
       state: 'offline',
-      endpoint: null,
-      message: `No backend reached. Last error: ${getErrorMessage(lastError)}`,
+      endpoint: incompatible?.apiBaseUrl ?? null,
+      message,
       checkedAt: formatCheckedAt(),
     });
 
@@ -959,9 +998,16 @@ export default function App(): React.JSX.Element {
       setOverrideConfirmed(false);
 
       try {
+        const verifiedApiBaseUrl = await checkBackendConnection();
+        if (!verifiedApiBaseUrl) {
+          throw new Error(
+            'Network request failed: no compatible analysis backend is available.',
+          );
+        }
+
         let lastNetworkError: unknown = null;
 
-        for (const apiBaseUrl of getOrderedApiBaseUrls(activeApiBaseUrl)) {
+        for (const apiBaseUrl of getOrderedApiBaseUrls(verifiedApiBaseUrl)) {
           try {
             const response = await fetchWithTimeout(
               `${apiBaseUrl}/analyze`,
@@ -1041,7 +1087,7 @@ export default function App(): React.JSX.Element {
         setIsAnalyzing(false);
       }
     },
-    [activeApiBaseUrl, applyAnalysisToImage],
+    [applyAnalysisToImage, checkBackendConnection],
   );
 
   const takePhoto = async (): Promise<void> => {

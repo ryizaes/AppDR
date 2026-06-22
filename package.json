@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
+    "backend": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-backend.ps1",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
