@@ -56,8 +56,8 @@ test('shows capture and fundus upload actions on the main screen', async () => {
   });
 
   const rendered = JSON.stringify(renderer.toJSON());
-  expect(rendered).toContain('Capture Image');
-  expect(rendered).toContain('Upload Fundus Image');
+  expect(rendered).toContain('Start Retinal Capture');
+  expect(rendered).toContain('Upload Fundus Photo');
 
   await ReactTestRenderer.act(async () => {
     renderer.unmount();

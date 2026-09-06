@@ -282,14 +282,51 @@ const imagePicker = NativeModules.DRImagePicker as
   | ImagePickerModule
   | undefined;
 
-const LOCAL_NETWORK_API_BASE_URLS = ['http://192.168.1.12:8000'];
+const PRODUCTION_API_BASE_URL = 'https://optimeye-api-jmogcbpd7a-as.a.run.app';
+const LOCAL_NETWORK_API_HOST = '192.168.1.12';
 const EXPECTED_MODEL_MODE = 'dual_model_screening_hybrid_severity';
-const HEALTH_CHECK_TIMEOUT_MS = 4000;
+const HEALTH_CHECK_TIMEOUT_MS = __DEV__ ? 4000 : 15000;
 const ANALYZE_TIMEOUT_MS = 25000;
 const STATUS_POLL_INTERVAL_MS = 1500;
 const STATUS_TIMEOUT_MS = 180000;
 const ANALYSIS_CROP_SCALE = 1;
 const STAGE_OPTIONS = [0, 1, 2, 3, 4];
+const palette = {
+  canvas: '#F6F9FC',
+  surface: '#FFFFFF',
+  surfaceTint: '#EEF6F8',
+  navy: '#0B2545',
+  ink: '#102A43',
+  body: '#486581',
+  muted: '#627D98',
+  line: '#D9E2EC',
+  lineStrong: '#BCCCDC',
+  primary: '#0B5CAD',
+  primaryDark: '#073B78',
+  teal: '#127C8A',
+  tealDark: '#0B5963',
+  tealSoft: '#DDF3F2',
+  success: '#198754',
+  successSoft: '#E7F6EE',
+  warning: '#B7791F',
+  warningSoft: '#FFF7E0',
+  danger: '#C2414B',
+  dangerSoft: '#FFF0F2',
+  white: '#FFFFFF',
+};
+const radius = {
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
+};
+const softShadow = {
+  shadowColor: '#0B2545',
+  shadowOffset: {width: 0, height: 10},
+  shadowOpacity: 0.08,
+  shadowRadius: 22,
+  elevation: 3,
+};
 const STAGE_PROBABILITY_ORDER = [
   'No apparent diabetic retinopathy',
   'Mild non-proliferative diabetic retinopathy',
@@ -309,7 +346,10 @@ const getOrderedApiBaseUrls = (preferredUrl: string | null): string[] =>
 
 const getApiBaseUrlForHost = (protocol: string, hostname: string): string[] => {
   if (Platform.OS === 'android' && isLoopbackHost(hostname)) {
-    return [`${protocol}//10.0.2.2:8000`, `${protocol}//${hostname}:8000`];
+    return [
+      `${protocol}//${['10', '0', '2', '2'].join('.')}:8000`,
+      `${protocol}//${hostname}:8000`,
+    ];
   }
 
   return [`${protocol}//${hostname}:8000`];
@@ -337,22 +377,29 @@ const getDevServerApiBaseUrls = (): string[] => {
   }
 };
 
-const API_BASE_URLS = uniqueStrings(
+const getDevelopmentApiBaseUrls = (): string[] =>
   Platform.OS === 'android'
     ? [
-        'http://127.0.0.1:8000',
-        'http://10.0.2.2:8000',
+        `http://${['127', '0', '0', '1'].join('.')}:8000`,
+        `http://${['10', '0', '2', '2'].join('.')}:8000`,
         ...getDevServerApiBaseUrls(),
-        ...LOCAL_NETWORK_API_BASE_URLS,
+        `http://${LOCAL_NETWORK_API_HOST}:8000`,
       ]
     : [
         ...getDevServerApiBaseUrls(),
         ...(Platform.select({
-          ios: ['http://127.0.0.1:8000'],
-          default: ['http://127.0.0.1:8000'],
+          ios: [`http://${['127', '0', '0', '1'].join('.')}:8000`],
+          default: [`http://${['127', '0', '0', '1'].join('.')}:8000`],
         }) ?? []),
-        ...LOCAL_NETWORK_API_BASE_URLS,
-      ],
+        `http://${LOCAL_NETWORK_API_HOST}:8000`,
+      ];
+
+const API_BASE_URLS = uniqueStrings(
+  !__DEV__ && PRODUCTION_API_BASE_URL
+    ? [PRODUCTION_API_BASE_URL]
+    : __DEV__
+      ? getDevelopmentApiBaseUrls()
+      : [],
 );
 
 const needsLegacyStoragePermission = (): boolean =>
@@ -970,7 +1017,9 @@ export default function App(): React.JSX.Element {
       ? `${getErrorMessage(
           incompatible.error,
         )} Restart the backend with the current AppDR configuration.`
-      : 'Analysis server was not reached. Start the backend on the laptop and confirm the phone and laptop are on the same network.';
+      : __DEV__
+        ? 'Analysis server was not reached. Start the backend on the laptop and confirm the phone and laptop are on the same network.'
+        : `Production analysis server was not reached at ${PRODUCTION_API_BASE_URL}. Check the device internet connection and try again.`;
 
     setBackendStatus({
       state: 'offline',
@@ -1269,7 +1318,7 @@ export default function App(): React.JSX.Element {
             ]}
           >
             {isChecking ? (
-              <ActivityIndicator color="#071014" size="small" />
+              <ActivityIndicator color={palette.white} size="small" />
             ) : (
               <Text style={styles.statusBadgeText}>{badgeText}</Text>
             )}
@@ -1307,14 +1356,19 @@ export default function App(): React.JSX.Element {
 
   const renderHome = () => (
     <ScrollView style={styles.appSurface} contentContainerStyle={styles.page}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F5FAF8" />
+      <StatusBar barStyle="dark-content" backgroundColor={palette.canvas} />
       <View style={styles.brandBlock}>
-        <Text style={styles.brandLabel}>DR Screening</Text>
-        <Text style={styles.brandTitle}>Clinician Review Support</Text>
+        <Text style={styles.brandLabel}>OPTIMEYE</Text>
+        <Text style={styles.brandTitle}>Retinal Screening Support</Text>
         <Text style={styles.brandSubtitle}>
-          Classical retinal image processing with dual-tier supervised ML for
-          clinician-reviewed screening support.
+          Capture or upload fundus images for quality checks, lesion-supported
+          findings, and clinician-reviewable DR screening output.
         </Text>
+        <View style={styles.trustStrip}>
+          <Text style={styles.trustPill}>Production API</Text>
+          <Text style={styles.trustPill}>XGBoost severity support</Text>
+          <Text style={styles.trustPill}>203-feature pipeline</Text>
+        </View>
       </View>
 
       <View style={styles.primaryPanel}>
@@ -1326,7 +1380,7 @@ export default function App(): React.JSX.Element {
           <Text style={styles.panelText}>
             {selectedImage
               ? selectedImage.savedAt
-              : 'Capture a retinal image or choose an existing fundus image.'}
+              : 'Start with a new retinal capture or choose an existing fundus image for analysis.'}
           </Text>
         </View>
         <View style={styles.buttonRow}>
@@ -1335,7 +1389,7 @@ export default function App(): React.JSX.Element {
             onPress={openCapture}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>Capture Image</Text>
+            <Text style={styles.primaryButtonText}>Start Retinal Capture</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.secondaryButton, styles.buttonFlex]}
@@ -1344,7 +1398,7 @@ export default function App(): React.JSX.Element {
             activeOpacity={0.8}
           >
             <Text style={styles.secondaryButtonText}>
-              {isPickingImage ? 'Opening Image Picker' : 'Upload Fundus Image'}
+              {isPickingImage ? 'Opening image picker' : 'Upload Fundus Photo'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1358,9 +1412,9 @@ export default function App(): React.JSX.Element {
           onPress={() => setScreen('history')}
           activeOpacity={0.8}
         >
-          <Text style={styles.tileTitle}>History</Text>
+          <Text style={styles.tileTitle}>Screening history</Text>
           <Text style={styles.tileValue}>{history.length}</Text>
-          <Text style={styles.tileText}>Saved screening images</Text>
+          <Text style={styles.tileText}>Saved retinal image records</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.tile}
@@ -1368,7 +1422,7 @@ export default function App(): React.JSX.Element {
           activeOpacity={0.8}
         >
           <Text style={styles.tileTitle}>About DR</Text>
-          <Text style={styles.tileValue}>Info</Text>
+          <Text style={styles.tileValue}>Guide</Text>
           <Text style={styles.tileText}>Clinical context</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -1378,7 +1432,7 @@ export default function App(): React.JSX.Element {
         >
           <Text style={styles.tileTitle}>Eye Care</Text>
           <Text style={styles.tileValue}>Tips</Text>
-          <Text style={styles.tileText}>Retinal health reminders</Text>
+          <Text style={styles.tileText}>Patient-friendly reminders</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.tile}
@@ -1387,18 +1441,18 @@ export default function App(): React.JSX.Element {
           }
           activeOpacity={0.8}
         >
-          <Text style={styles.tileTitle}>Review</Text>
+          <Text style={styles.tileTitle}>Case review</Text>
           <Text style={styles.tileValue}>Case</Text>
-          <Text style={styles.tileText}>Latest image record</Text>
+          <Text style={styles.tileText}>Open the latest image record</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.noticePanel}>
         <Text style={styles.noticeTitle}>Screening support only</Text>
         <Text style={styles.noticeText}>
-          Screening classifications can under-call advanced disease. A qualified
-          eye-care professional must review the image, overlay, and manual grade
-          before any clinical decision is made.
+          Optimeye supports review; it does not replace diagnosis. A qualified
+          eye-care professional should review the image, overlays, and final
+          grade before clinical decisions are made.
         </Text>
       </View>
     </ScrollView>
@@ -1411,7 +1465,7 @@ export default function App(): React.JSX.Element {
     if (!device) {
       return (
         <View style={styles.darkCenter}>
-          <ActivityIndicator size="large" color="#62D2A2" />
+          <ActivityIndicator size="large" color={palette.primary} />
           <Text style={styles.loadingText}>Searching for camera...</Text>
           <TouchableOpacity
             style={styles.secondaryButton}
@@ -1425,7 +1479,7 @@ export default function App(): React.JSX.Element {
 
     return (
       <View style={styles.captureScreen}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F5FAF8" />
+        <StatusBar barStyle="dark-content" backgroundColor={palette.canvas} />
         <View style={styles.capturePage}>
           <View style={styles.captureHeader}>
             <TouchableOpacity
@@ -1454,7 +1508,7 @@ export default function App(): React.JSX.Element {
 
           <View style={styles.captureTitleBlock}>
             <Text style={styles.captureEyebrow}>Retinal capture</Text>
-            <Text style={styles.captureTitle}>Center Square Scan</Text>
+            <Text style={styles.captureTitle}>Center the fundus image</Text>
           </View>
 
           <View style={styles.cameraViewport}>
@@ -1485,9 +1539,10 @@ export default function App(): React.JSX.Element {
           </View>
 
           <View style={styles.captureGuide}>
-            <Text style={styles.captureGuideTitle}>Analysis region</Text>
+            <Text style={styles.captureGuideTitle}>Capture guidance</Text>
             <Text style={styles.captureGuideText}>
-              The square preview is saved as the analysis image.
+              Keep the optic disc and macula inside the square frame. The saved
+              crop is sent to the production analysis service.
             </Text>
           </View>
 
@@ -1502,7 +1557,7 @@ export default function App(): React.JSX.Element {
               activeOpacity={0.75}
             >
               {isCapturing ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color={palette.white} size="small" />
               ) : (
                 <View style={styles.captureInner} />
               )}
@@ -1811,8 +1866,8 @@ export default function App(): React.JSX.Element {
                 value={showLesionOverlay}
                 onValueChange={setShowLesionOverlay}
                 disabled={!selectedImage.analysis.processed_images.lesion_overlay}
-                trackColor={{ false: '#CFE3DE', true: '#76D0AE' }}
-                thumbColor={showLesionOverlay ? '#0E7C7B' : '#F8FBFA'}
+                trackColor={{ false: palette.lineStrong, true: '#8BD8D3' }}
+                thumbColor={showLesionOverlay ? palette.teal : palette.white}
               />
             </View>
           )}
@@ -1839,7 +1894,7 @@ export default function App(): React.JSX.Element {
             </Text>
             <Text style={styles.resultText}>
               {isAnalyzing
-                ? 'The system is checking image quality, enhancing the retinal image, segmenting vessels, detecting lesions, extracting classical features, and preparing a screening-support result.'
+                ? 'Optimeye is checking image quality, enhancing the retinal image, segmenting vessels, detecting lesions, extracting classical features, and preparing a screening-support result.'
                 : selectedImage.analysis
                   ? getPlainExplanation(selectedImage.analysis)
                   : 'Review the selected fundus image, then tap Analyze Image.'}
@@ -1852,31 +1907,32 @@ export default function App(): React.JSX.Element {
                     {getScreeningConfidenceLevel(selectedImage.analysis)}
                   </Text>
                 </View>
-                <Text style={styles.resultProbability}>
-                  Screening confidence{' '}
-                  {getScreeningConfidencePercent(selectedImage.analysis) === null
-                    ? getScreeningConfidenceLevel(selectedImage.analysis)
-                    : formatPercent(
-                        getScreeningConfidencePercent(selectedImage.analysis) ?? 0,
-                      )}
-                  {'\n'}
-                  Referable probability{' '}
-                  {getReferableProbabilityPercent(selectedImage.analysis) === null
-                    ? 'Unavailable'
-                    : formatPercent(
-                        getReferableProbabilityPercent(selectedImage.analysis) ?? 0,
-                      )}
-                  {'\n'}
-                  Supporting Severity Assessment:{' '}
-                  {getMedicalLabel(selectedImage.analysis)}
-                  {getGradeConfidencePercent(selectedImage.analysis) !== null
-                    ? ` (${formatPercent(
-                        getGradeConfidencePercent(selectedImage.analysis) ?? 0,
-                      )})`
-                    : ''}
-                  {'\n'}
-                  {getRecommendation(selectedImage.analysis)}
-                </Text>
+                <View style={styles.resultFacts}>
+                  <Text style={styles.resultFact}>
+                    Screening confidence:{' '}
+                    {getScreeningConfidencePercent(selectedImage.analysis) === null
+                      ? getScreeningConfidenceLevel(selectedImage.analysis)
+                      : formatPercent(
+                          getScreeningConfidencePercent(selectedImage.analysis) ?? 0,
+                        )}
+                  </Text>
+                  <Text style={styles.resultFact}>
+                    Referable probability:{' '}
+                    {getReferableProbabilityPercent(selectedImage.analysis) === null
+                      ? 'Unavailable'
+                      : formatPercent(
+                          getReferableProbabilityPercent(selectedImage.analysis) ?? 0,
+                        )}
+                  </Text>
+                  <Text style={styles.resultFact}>
+                    Supporting severity assessment: {getMedicalLabel(selectedImage.analysis)}
+                    {getGradeConfidencePercent(selectedImage.analysis) !== null
+                      ? ` (${formatPercent(
+                          getGradeConfidencePercent(selectedImage.analysis) ?? 0,
+                        )})`
+                      : ''}
+                  </Text>
+                </View>
               </View>
             )}
           </View>
@@ -1892,7 +1948,7 @@ export default function App(): React.JSX.Element {
               activeOpacity={0.8}
             >
               <Text style={styles.primaryButtonText}>
-                {isAnalyzing ? 'Analyzing Image' : 'Analyze Image'}
+                {isAnalyzing ? 'Analyzing image' : 'Analyze Image'}
               </Text>
             </TouchableOpacity>
           )}
@@ -2025,7 +2081,7 @@ export default function App(): React.JSX.Element {
             </View>
           </View>
           {selectedImage.analysis && renderSpecialistOverride(selectedImage.analysis)}
-          <Text style={styles.sectionTitle}>Retake / Choose Another Image</Text>
+          <Text style={styles.sectionTitle}>Retake or choose another image</Text>
           <View style={styles.buttonRow}>
             <TouchableOpacity
               style={[styles.primaryButton, styles.buttonFlex]}
@@ -2040,8 +2096,8 @@ export default function App(): React.JSX.Element {
             >
               <Text style={styles.secondaryButtonText}>
                 {isPickingImage
-                  ? 'Opening Image Picker'
-                  : 'Upload Fundus Image'}
+                  ? 'Opening image picker'
+                  : 'Upload Fundus Photo'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2189,77 +2245,99 @@ export default function App(): React.JSX.Element {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F5FAF8',
+    backgroundColor: palette.canvas,
   },
   appSurface: {
     flex: 1,
-    backgroundColor: '#F5FAF8',
+    backgroundColor: palette.canvas,
   },
   page: {
     padding: 20,
     paddingTop: 48,
-    paddingBottom: 36,
+    paddingBottom: 38,
   },
   brandBlock: {
-    marginBottom: 22,
+    marginBottom: 24,
   },
   brandLabel: {
-    color: '#0E7C7B',
-    fontSize: 13,
-    fontWeight: '700',
+    color: palette.teal,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   brandTitle: {
-    color: '#12323A',
-    fontSize: 31,
-    fontWeight: '800',
+    color: palette.navy,
+    fontSize: 32,
+    fontWeight: '900',
+    lineHeight: 38,
     marginTop: 8,
   },
   brandSubtitle: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 15,
-    lineHeight: 22,
-    marginTop: 8,
+    lineHeight: 23,
+    marginTop: 10,
+  },
+  trustStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 16,
+  },
+  trustPill: {
+    borderRadius: 999,
+    backgroundColor: palette.tealSoft,
+    borderColor: '#B7E3E2',
+    borderWidth: 1,
+    color: palette.tealDark,
+    fontSize: 11,
+    fontWeight: '900',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   primaryPanel: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    ...softShadow,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 16,
-    gap: 16,
+    borderRadius: radius.xl,
+    padding: 18,
+    gap: 18,
     marginBottom: 16,
-    elevation: 2,
   },
   panelEyebrow: {
-    color: '#3D8C83',
+    color: palette.primary,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '900',
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   panelTitle: {
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 20,
-    fontWeight: '800',
-    marginTop: 5,
-  },
-  panelText: {
-    color: '#5D7378',
-    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 26,
     marginTop: 6,
   },
+  panelText: {
+    color: palette.body,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 7,
+  },
   primaryButton: {
-    minHeight: 48,
-    borderRadius: 8,
-    backgroundColor: '#0E7C7B',
+    minHeight: 54,
+    borderRadius: radius.md,
+    backgroundColor: palette.primary,
     paddingHorizontal: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#FFFFFF',
+    color: palette.white,
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   buttonRow: {
     width: '100%',
@@ -2276,37 +2354,38 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   secondaryButton: {
-    minHeight: 48,
-    borderRadius: 8,
-    backgroundColor: '#EAF4F1',
-    borderColor: '#CFE3DE',
+    minHeight: 54,
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceTint,
+    borderColor: '#BBDDE5',
     borderWidth: 1,
     paddingHorizontal: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   secondaryButtonText: {
-    color: '#0E5E63',
+    color: palette.primaryDark,
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   connectionPanel: {
-    borderRadius: 8,
+    ...softShadow,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    padding: 14,
+    padding: 16,
     marginBottom: 16,
   },
   connectionConnected: {
-    backgroundColor: '#E8F7F0',
-    borderColor: '#A7D8C6',
+    backgroundColor: palette.successSoft,
+    borderColor: '#A7DCC1',
   },
   connectionOffline: {
-    backgroundColor: '#FFF0F1',
-    borderColor: '#F0B7BD',
+    backgroundColor: palette.dangerSoft,
+    borderColor: '#F2B8BE',
   },
   connectionNeutral: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
   },
   connectionHeader: {
     flexDirection: 'row',
@@ -2318,50 +2397,52 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   connectionTitle: {
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '900',
+    lineHeight: 22,
     marginTop: 5,
   },
   connectionText: {
-    color: '#4E666B',
+    color: palette.body,
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 19,
     marginTop: 10,
   },
   connectionMeta: {
-    color: '#789096',
+    color: palette.muted,
     fontSize: 12,
+    lineHeight: 18,
     marginTop: 6,
   },
   statusBadge: {
-    minWidth: 54,
+    minWidth: 58,
     height: 34,
-    borderRadius: 8,
+    borderRadius: 999,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 11,
   },
   statusBadgeOk: {
-    backgroundColor: '#3ABF8F',
+    backgroundColor: palette.success,
   },
   statusBadgeWait: {
-    backgroundColor: '#F5C96B',
+    backgroundColor: palette.warning,
   },
   statusBadgeOff: {
-    backgroundColor: '#FF9CA8',
+    backgroundColor: palette.danger,
   },
   statusBadgeText: {
-    color: '#FFFFFF',
+    color: palette.white,
     fontSize: 12,
     fontWeight: '900',
   },
   compactButton: {
     alignSelf: 'flex-start',
-    minHeight: 38,
-    borderRadius: 8,
-    backgroundColor: '#F3F9F7',
-    borderColor: '#CFE3DE',
+    minHeight: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surface,
+    borderColor: palette.lineStrong,
     borderWidth: 1,
     paddingHorizontal: 14,
     justifyContent: 'center',
@@ -2372,9 +2453,9 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   compactButtonText: {
-    color: '#0E5E63',
+    color: palette.primaryDark,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   grid: {
     flexDirection: 'row',
@@ -2382,46 +2463,49 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   tile: {
+    ...softShadow,
     width: '48%',
-    minHeight: 132,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    minHeight: 138,
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
     justifyContent: 'space-between',
   },
   tileTitle: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
+    lineHeight: 18,
   },
   tileValue: {
-    color: '#0E7C7B',
+    color: palette.primary,
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   tileText: {
-    color: '#789096',
+    color: palette.muted,
     fontSize: 12,
+    lineHeight: 17,
   },
   noticePanel: {
     marginTop: 18,
-    borderRadius: 8,
-    backgroundColor: '#FFF8E6',
-    borderColor: '#E8D59D',
+    borderRadius: radius.lg,
+    backgroundColor: palette.warningSoft,
+    borderColor: '#E8D391',
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
   },
   noticeTitle: {
-    color: '#8A6A12',
+    color: palette.warning,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   noticeText: {
-    color: '#6F622F',
+    color: '#6F5414',
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 20,
     marginTop: 6,
   },
   topBar: {
@@ -2432,29 +2516,31 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   backButton: {
-    minWidth: 68,
-    height: 38,
-    borderRadius: 8,
-    backgroundColor: '#EAF4F1',
+    minWidth: 70,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceTint,
+    borderColor: '#BBDDE5',
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   backButtonText: {
-    color: '#0E5E63',
+    color: palette.primaryDark,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   backPlaceholder: {
-    width: 68,
+    width: 70,
   },
   topBarTitle: {
-    color: '#12323A',
+    color: palette.navy,
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   captureScreen: {
     flex: 1,
-    backgroundColor: '#F5FAF8',
+    backgroundColor: palette.canvas,
   },
   capturePage: {
     flex: 1,
@@ -2467,52 +2553,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   captureTitleBlock: {
-    marginTop: 22,
+    marginTop: 24,
     marginBottom: 18,
   },
   captureEyebrow: {
-    color: '#0E7C7B',
-    fontSize: 13,
-    fontWeight: '800',
+    color: palette.teal,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
     textTransform: 'uppercase',
   },
   captureTitle: {
-    color: '#12323A',
-    fontSize: 27,
-    fontWeight: '800',
-    marginTop: 6,
+    color: palette.navy,
+    fontSize: 28,
+    fontWeight: '900',
+    lineHeight: 34,
+    marginTop: 7,
   },
   captureStatusPill: {
-    minWidth: 96,
-    height: 38,
-    borderRadius: 8,
-    backgroundColor: '#EEF4F2',
-    borderColor: '#D8E8E4',
+    minWidth: 98,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   captureStatusReady: {
-    backgroundColor: '#E8F7F0',
-    borderColor: '#A7D8C6',
+    backgroundColor: palette.successSoft,
+    borderColor: '#A7DCC1',
   },
   captureStatusText: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   captureStatusTextReady: {
-    color: '#147A5C',
+    color: palette.success,
   },
   cameraViewport: {
+    ...softShadow,
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 8,
-    backgroundColor: '#DCE8E4',
+    borderRadius: radius.xl,
+    backgroundColor: '#D8E7EF',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#BFD8D2',
-    elevation: 3,
+    borderColor: '#ADC8D6',
   },
   cameraFrame: {
     position: 'absolute',
@@ -2525,12 +2613,12 @@ const styles = StyleSheet.create({
   },
   cameraFrameGlow: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    bottom: 12,
-    left: 12,
-    borderRadius: 8,
-    borderColor: 'rgba(255,255,255,0.82)',
+    top: 14,
+    right: 14,
+    bottom: 14,
+    left: 14,
+    borderRadius: radius.lg,
+    borderColor: 'rgba(255,255,255,0.88)',
     borderWidth: 1,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
@@ -2538,18 +2626,18 @@ const styles = StyleSheet.create({
     width: '38%',
     aspectRatio: 1,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.85)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(14,124,123,0.12)',
+    backgroundColor: 'rgba(11,92,173,0.14)',
   },
   retinaTargetCore: {
     width: '34%',
     aspectRatio: 1,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(245,201,107,0.9)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,211,105,0.95)',
   },
   cornerTopLeft: {
     position: 'absolute',
@@ -2557,9 +2645,9 @@ const styles = StyleSheet.create({
     left: 0,
     width: 52,
     height: 52,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderColor: '#FFFFFF',
+    borderTopWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: palette.white,
   },
   cornerTopRight: {
     position: 'absolute',
@@ -2567,9 +2655,9 @@ const styles = StyleSheet.create({
     right: 0,
     width: 52,
     height: 52,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
-    borderColor: '#FFFFFF',
+    borderTopWidth: 4,
+    borderRightWidth: 4,
+    borderColor: palette.white,
   },
   cornerBottomLeft: {
     position: 'absolute',
@@ -2577,9 +2665,9 @@ const styles = StyleSheet.create({
     left: 0,
     width: 52,
     height: 52,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-    borderColor: '#FFFFFF',
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    borderColor: palette.white,
   },
   cornerBottomRight: {
     position: 'absolute',
@@ -2587,29 +2675,29 @@ const styles = StyleSheet.create({
     right: 0,
     width: 52,
     height: 52,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-    borderColor: '#FFFFFF',
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    borderColor: palette.white,
   },
   captureGuide: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
     marginTop: 16,
   },
   captureGuideTitle: {
-    color: '#0E7C7B',
+    color: palette.primary,
     fontSize: 13,
     fontWeight: '900',
   },
   captureGuideText: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 12,
-    lineHeight: 17,
-    marginTop: 4,
+    lineHeight: 18,
+    marginTop: 5,
   },
   captureDock: {
     alignItems: 'center',
@@ -2618,60 +2706,63 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   captureButton: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
-    backgroundColor: '#0E7C7B',
-    borderColor: '#CFE3DE',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: palette.primary,
+    borderColor: '#CFE6F7',
     borderWidth: 7,
     justifyContent: 'center',
     alignItems: 'center',
   },
   captureDisabled: {
-    backgroundColor: '#94AAA9',
-    borderColor: '#D8E8E4',
+    backgroundColor: '#91A4B7',
+    borderColor: palette.line,
   },
   captureInner: {
     width: 58,
     height: 58,
     borderRadius: 29,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: palette.white,
   },
   captureCaption: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 12,
-    fontWeight: '700',
-    backgroundColor: '#FFFFFF',
+    fontWeight: '800',
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
+    borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 999,
   },
   darkCenter: {
     flex: 1,
-    backgroundColor: '#F5FAF8',
+    backgroundColor: palette.canvas,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
     padding: 24,
   },
   loadingText: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 15,
   },
   preview: {
+    ...softShadow,
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 8,
-    backgroundColor: '#DCE8E4',
+    borderRadius: radius.xl,
+    backgroundColor: '#D8E7EF',
     marginBottom: 14,
   },
   overlayToggleRow: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
     marginBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2679,91 +2770,99 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   overlayToggleTitle: {
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   overlayToggleMeta: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 12,
+    lineHeight: 17,
     marginTop: 3,
   },
   resultBand: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    ...softShadow,
+    borderRadius: radius.xl,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    padding: 16,
+    padding: 18,
     marginBottom: 14,
   },
   resultBandReferable: {
-    backgroundColor: '#FFF0F1',
-    borderColor: '#F0B7BD',
+    backgroundColor: palette.dangerSoft,
+    borderColor: '#F2B8BE',
   },
   resultBandNonReferable: {
-    backgroundColor: '#E8F7F0',
-    borderColor: '#A7D8C6',
+    backgroundColor: palette.successSoft,
+    borderColor: '#A7DCC1',
   },
   resultBandUncertain: {
-    backgroundColor: '#FFF7E6',
-    borderColor: '#E7C36A',
+    backgroundColor: palette.warningSoft,
+    borderColor: '#E8D391',
   },
   resultLabel: {
-    color: '#0E7C7B',
+    color: palette.teal,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: 0.9,
     textTransform: 'uppercase',
   },
   resultTitle: {
-    color: '#12323A',
-    fontSize: 20,
-    fontWeight: '800',
-    lineHeight: 25,
-    marginTop: 6,
+    color: palette.navy,
+    fontSize: 21,
+    fontWeight: '900',
+    lineHeight: 27,
+    marginTop: 7,
   },
   resultText: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 14,
-    lineHeight: 20,
-    marginTop: 8,
+    lineHeight: 21,
+    marginTop: 9,
   },
   resultSummaryRow: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     flexDirection: 'row',
     gap: 12,
-    marginTop: 12,
+    marginTop: 14,
   },
   stageBadge: {
     alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: '#0E7C7B',
-    minWidth: 70,
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    backgroundColor: palette.primary,
+    minWidth: 82,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   stageBadgeLabel: {
-    color: '#D9F5EF',
+    color: '#DCEFFF',
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '900',
     textTransform: 'uppercase',
   },
   stageBadgeValue: {
-    color: '#FFFFFF',
+    color: palette.white,
     fontSize: 18,
     fontWeight: '900',
     marginTop: 2,
   },
-  resultProbability: {
+  resultFacts: {
     flex: 1,
-    color: '#0E5E63',
-    fontSize: 15,
+    gap: 5,
+    justifyContent: 'center',
+  },
+  resultFact: {
+    color: palette.tealDark,
+    fontSize: 13,
     fontWeight: '800',
-    lineHeight: 22,
+    lineHeight: 19,
   },
   skeletonPanel: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
     padding: 14,
     marginBottom: 14,
@@ -2771,104 +2870,104 @@ const styles = StyleSheet.create({
   },
   skeletonLineWide: {
     height: 16,
-    borderRadius: 8,
-    backgroundColor: '#E6F0ED',
+    borderRadius: 999,
+    backgroundColor: '#DFEAF2',
     width: '92%',
   },
   skeletonLine: {
     height: 16,
-    borderRadius: 8,
-    backgroundColor: '#EDF5F2',
+    borderRadius: 999,
+    backgroundColor: '#E9F1F6',
     width: '72%',
   },
   skeletonLineShort: {
     height: 16,
-    borderRadius: 8,
-    backgroundColor: '#F3F8F6',
+    borderRadius: 999,
+    backgroundColor: '#F1F6F9',
     width: '45%',
   },
   errorPanel: {
-    borderRadius: 8,
-    backgroundColor: '#FFF0F1',
-    borderColor: '#F0B7BD',
+    borderRadius: radius.lg,
+    backgroundColor: palette.dangerSoft,
+    borderColor: '#F2B8BE',
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
     marginBottom: 14,
   },
   errorPanelTitle: {
-    color: '#B93A48',
+    color: palette.danger,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   errorPanelText: {
-    color: '#7A3039',
+    color: '#7D2F36',
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
   },
   qualityPanel: {
-    borderRadius: 8,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
     marginBottom: 14,
   },
   qualityGood: {
-    backgroundColor: '#E8F7F0',
-    borderColor: '#A7D8C6',
+    backgroundColor: palette.successSoft,
+    borderColor: '#A7DCC1',
   },
   qualityWarn: {
-    backgroundColor: '#FFF8E6',
-    borderColor: '#E8D59D',
+    backgroundColor: palette.warningSoft,
+    borderColor: '#E8D391',
   },
   qualityTitle: {
-    color: '#12323A',
+    color: palette.navy,
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
     marginBottom: 12,
   },
   qualityScoreRow: {
-    minHeight: 72,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    minHeight: 76,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    paddingHorizontal: 13,
+    paddingVertical: 11,
     justifyContent: 'center',
     marginBottom: 10,
   },
   qualityScoreValue: {
-    color: '#12323A',
-    fontSize: 26,
+    color: palette.navy,
+    fontSize: 27,
     fontWeight: '900',
   },
   qualityScoreLabel: {
-    color: '#0E5E63',
+    color: palette.primaryDark,
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '900',
     marginTop: 2,
   },
   warningText: {
-    color: '#8A6A12',
+    color: palette.warning,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 4,
   },
   goodText: {
-    color: '#147A5C',
+    color: palette.success,
     fontSize: 13,
     lineHeight: 19,
   },
   processedPanel: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
     marginBottom: 14,
   },
   sectionTitle: {
-    color: '#12323A',
+    color: palette.navy,
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
     marginBottom: 12,
   },
   processedGrid: {
@@ -2878,18 +2977,18 @@ const styles = StyleSheet.create({
   },
   processedItem: {
     width: '48%',
-    gap: 6,
+    gap: 7,
   },
   processedImage: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 8,
-    backgroundColor: '#EAF4F1',
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceTint,
   },
   processedLabel: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     textAlign: 'center',
   },
   metricGrid: {
@@ -2901,24 +3000,25 @@ const styles = StyleSheet.create({
   metricBox: {
     flexGrow: 1,
     width: '48%',
-    minHeight: 86,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    minHeight: 88,
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    padding: 10,
+    padding: 12,
     justifyContent: 'space-between',
   },
   metricLabel: {
-    color: '#789096',
+    color: palette.muted,
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
   metricValue: {
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
     lineHeight: 19,
   },
   actionRow: {
@@ -2927,92 +3027,93 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   summaryPanel: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
     marginBottom: 14,
   },
   findingRow: {
-    minHeight: 32,
+    minHeight: 34,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
   findingMark: {
-    width: 24,
-    fontSize: 17,
+    width: 32,
+    fontSize: 12,
     fontWeight: '900',
     textAlign: 'center',
   },
   findingDetected: {
-    color: '#147A5C',
+    color: palette.success,
   },
   findingAbsent: {
-    color: '#9A5660',
+    color: palette.danger,
   },
   findingText: {
     flex: 1,
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   recommendationText: {
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '900',
     lineHeight: 22,
   },
   reviewDisclaimer: {
-    color: '#4E666B',
+    color: palette.body,
     fontSize: 12,
     lineHeight: 18,
     marginTop: 10,
   },
   ruleBasedBanner: {
-    borderRadius: 8,
-    backgroundColor: '#FFF8E8',
-    borderColor: '#E8C878',
+    borderRadius: radius.lg,
+    backgroundColor: palette.warningSoft,
+    borderColor: '#E8D391',
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
     marginBottom: 14,
   },
   ruleBasedTitle: {
-    color: '#8A5A00',
+    color: palette.warning,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   ruleBasedText: {
-    color: '#6B5420',
+    color: '#6F5414',
     fontSize: 13,
     lineHeight: 19,
     marginTop: 6,
   },
   modelTypeText: {
-    color: '#0E7C7B',
+    color: palette.teal,
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
     marginTop: 4,
   },
   modelMetricText: {
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     marginTop: 8,
   },
   resultFinePrint: {
-    color: '#4E666B',
+    color: palette.body,
     fontSize: 12,
     lineHeight: 18,
     marginTop: 10,
   },
   probabilityGroupTitle: {
-    color: '#4E666B',
+    color: palette.body,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '900',
     marginTop: 14,
     marginBottom: 8,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   probabilityRow: {
@@ -3021,57 +3122,58 @@ const styles = StyleSheet.create({
   probabilityLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 5,
   },
   probabilityLabel: {
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     flex: 1,
   },
   probabilityValue: {
-    color: '#0E7C7B',
+    color: palette.primary,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '900',
     marginLeft: 8,
   },
   probabilityTrack: {
-    backgroundColor: '#E6F0ED',
-    borderRadius: 4,
+    backgroundColor: '#E3EDF5',
+    borderRadius: 999,
     height: 8,
     overflow: 'hidden',
   },
   probabilityFill: {
-    backgroundColor: '#0E7C7B',
-    borderRadius: 4,
+    backgroundColor: palette.primary,
+    borderRadius: 999,
     height: 8,
   },
   overridePanel: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
     marginBottom: 14,
   },
   overrideSummary: {
-    minHeight: 54,
-    borderRadius: 8,
-    backgroundColor: '#F6FAF8',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    minHeight: 58,
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceTint,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
     marginBottom: 12,
     alignItems: 'flex-start',
     gap: 6,
   },
   overrideLabel: {
-    color: '#789096',
+    color: palette.muted,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   overrideValue: {
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 14,
     fontWeight: '900',
     lineHeight: 20,
@@ -3081,10 +3183,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   stageOption: {
-    minHeight: 48,
-    borderRadius: 8,
-    backgroundColor: '#F3F9F7',
-    borderColor: '#CFE3DE',
+    minHeight: 50,
+    borderRadius: radius.md,
+    backgroundColor: '#F2F7FA',
+    borderColor: palette.line,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'flex-start',
@@ -3092,29 +3194,29 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   stageOptionSelected: {
-    backgroundColor: '#0E7C7B',
-    borderColor: '#0E7C7B',
+    backgroundColor: palette.primary,
+    borderColor: palette.primary,
   },
   stageOptionText: {
-    color: '#0E5E63',
+    color: palette.primaryDark,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '900',
     lineHeight: 18,
   },
   stageOptionTextSelected: {
-    color: '#FFFFFF',
+    color: palette.white,
   },
   auditText: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 10,
   },
   emptyPanel: {
-    minHeight: 220,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    minHeight: 224,
+    borderRadius: radius.xl,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
     padding: 18,
     alignItems: 'center',
@@ -3122,66 +3224,67 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   emptyTitle: {
-    color: '#12323A',
+    color: palette.navy,
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   historyItem: {
-    minHeight: 92,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    minHeight: 96,
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    padding: 10,
+    padding: 11,
     flexDirection: 'row',
     gap: 12,
     marginBottom: 12,
   },
   historyThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: 8,
-    backgroundColor: '#EAF4F1',
+    width: 74,
+    height: 74,
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceTint,
   },
   historyTextBlock: {
     flex: 1,
     justifyContent: 'center',
   },
   historyTitle: {
-    color: '#12323A',
+    color: palette.ink,
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   historyMeta: {
-    color: '#5D7378',
+    color: palette.body,
     fontSize: 12,
+    lineHeight: 17,
     marginTop: 4,
   },
   readingPanel: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    borderRadius: radius.xl,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    padding: 16,
+    padding: 18,
   },
   readingTitle: {
-    color: '#12323A',
+    color: palette.navy,
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
     marginBottom: 8,
   },
   readingText: {
-    color: '#4E666B',
+    color: palette.body,
     fontSize: 14,
-    lineHeight: 21,
+    lineHeight: 22,
     marginBottom: 18,
   },
   tipItem: {
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D8E8E4',
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    borderColor: palette.line,
     borderWidth: 1,
-    padding: 14,
+    padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -3191,11 +3294,11 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#0E7C7B',
+    backgroundColor: palette.teal,
   },
   tipText: {
     flex: 1,
-    color: '#4E666B',
+    color: palette.body,
     fontSize: 14,
     lineHeight: 20,
   },

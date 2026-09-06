@@ -1,12 +1,12 @@
-# AppDR
+# Optimeye
 
-React Native mobile app plus FastAPI backend for a classical image-processing
-diabetic retinopathy screening workflow.
+React Native mobile app plus FastAPI backend for a production diabetic
+retinopathy screening-support workflow.
 
-This project does not use CNNs or deep-learning image embeddings. The backend
-uses deterministic OpenCV classical image processing to extract 203 handcrafted
-retinal measurements, then loads traditional ML models from `backend/results/`
-for diabetic-retinopathy screening support.
+The deployed backend uses a task-specific dual-model flow: an AppDR binary SVM
+for referable DR screening and a full-training hybrid 5-class XGBoost model for
+severity support. The live feature payload currently reports `203` expanded
+features; not `207`.
 
 The current trained artifacts use labeled images from the local Downloads
 datasets:
@@ -33,6 +33,46 @@ The app is a screening/assistive tool only and is not a final diagnosis.
 - `android/app/src/main/java/com/appdr/` contains Android native code used by
   React Native, currently the gallery saver module.
 - `__tests__/` contains the React Native smoke test and native module mocks.
+
+## Production Deployment
+
+- Google Cloud project: `project-7ae532d9-6b7d-4f6c-8db`
+- Region: `asia-southeast1`
+- Backend Cloud Run service: `optimeye-api`
+- Backend URL: `https://optimeye-api-jmogcbpd7a-as.a.run.app`
+- Website Cloud Run service: `optimeye-site`
+- Website URL: `https://optimeye-site-335900035513.asia-southeast1.run.app`
+- Final APK URL: `https://optimeye-site-335900035513.asia-southeast1.run.app/downloads/OPTIMEYE-v1.0.1-release.apk`
+- Compatibility APK URLs: `https://optimeye-site-335900035513.asia-southeast1.run.app/downloads/optimeye.apk`, `https://optimeye-site-335900035513.asia-southeast1.run.app/downloads/drapp.apk`
+- Release APK: `release/OPTIMEYE-v1.0.1-release.apk`
+- Release APK SHA256: `A7AA7C85023DF753009B631DCC89A3675E9C023B249C7810DB283FF9ACDB8D6A`
+
+Verified production `/health` reports:
+
+- `model_mode`: `dual_model_screening_hybrid_severity`
+- `dual_model_ready`: `true`
+- `demo_hybrid_ready`: `true`
+- `multiclass_model`: `XGBoost`
+- `binary_model`: `SVM RBF`
+- `binary_threshold`: `0.2`
+
+The deployed model summary reports:
+
+- Severity model: Full-training hybrid 5-class XGBoost
+- Severity metrics: accuracy `83.85%`, balanced accuracy `72.35%`, macro F1 `74.52%`
+- Screening model: AppDR binary SVM
+- Screening metrics: referable recall `95.70%`, false negatives `51`, false positives `398`, F1 `83.50%`
+- Metrics note: validation/research metrics, not clinical deployment validation
+
+Verified production inference on
+`backend/results/heldout_demo_images/class2_moderate_npdr_01.jpg` returned:
+
+- `screening_result`: `referable`
+- `predicted_class`: `2`
+- `medical_label`: `Moderate non-proliferative diabetic retinopathy`
+- `grade_confidence`: `0.9126101732254028`
+- `referable_probability`: `0.8570645676759512`
+- `feature_count`: `203`
 
 ## Run The Backend
 

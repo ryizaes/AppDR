@@ -424,6 +424,14 @@ def train_one_cnn_source(spec: dict[str, Any], manifests: dict[str, pd.DataFrame
             scaler.load_state_dict(resumed["scaler_state_dict"])
         if logs:
             best_val = max(ffloat(row.get("val_macro_f1")) for row in logs)
+            if "stale_epochs" in resumed:
+                stale = int(resumed["stale_epochs"])
+            else:
+                best_log_index = max(
+                    range(len(logs)),
+                    key=lambda index: ffloat(logs[index].get("val_macro_f1")),
+                )
+                stale = len(logs) - best_log_index - 1
             if checkpoint_path.exists():
                 best_checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
                 best_state = {key: value.detach().cpu() for key, value in best_checkpoint["state_dict"].items()}
@@ -481,6 +489,7 @@ def train_one_cnn_source(spec: dict[str, Any], manifests: dict[str, pd.DataFrame
                     "pretrained": model.pretrained,
                     "epoch": epoch,
                     "best_val_macro_f1": best_val,
+                    "stale_epochs": stale,
                     "optimizer_state_dict": optimizer.state_dict(),
                     "scheduler_state_dict": scheduler.state_dict(),
                     "scaler_state_dict": scaler.state_dict(),
@@ -497,6 +506,7 @@ def train_one_cnn_source(spec: dict[str, Any], manifests: dict[str, pd.DataFrame
             "spec": spec,
             "epoch": epoch,
             "best_val_macro_f1": best_val,
+            "stale_epochs": stale,
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
             "scaler_state_dict": scaler.state_dict(),
@@ -603,6 +613,8 @@ def build_or_load_cnn_tables(manifests: dict[str, pd.DataFrame], args: argparse.
     dictionary_rows = []
     for source in sources:
         source_id = str(source["source_id"])
+        source_artifact_dir = CNN_SOURCE_DIR / source_id
+        source_artifact_dir.mkdir(parents=True, exist_ok=True)
         raw_embeddings: dict[str, np.ndarray] = {}
         prediction_tables: dict[str, pd.DataFrame] = {}
         for split in ["train", "val", "test"]:
@@ -610,7 +622,7 @@ def build_or_load_cnn_tables(manifests: dict[str, pd.DataFrame], args: argparse.
         pca_components = min(args.pca_components, raw_embeddings["train"].shape[1], raw_embeddings["train"].shape[0])
         pca = PCA(n_components=pca_components, random_state=RANDOM_STATE)
         pca.fit(raw_embeddings["train"])
-        with (CNN_SOURCE_DIR / source_id / "embedding_pca.pkl").open("wb") as file:
+        with (source_artifact_dir / "embedding_pca.pkl").open("wb") as file:
             pickle.dump(pca, file)
         report_lines.extend(
             [
@@ -1016,9 +1028,23 @@ def train_binary(tables: dict[str, pd.DataFrame], versions: dict[str, list[str]]
                 val_scores = binary_scores(fitted, val[features])
                 test_scores = binary_scores(fitted, test[features])
                 val_best = choose_binary_threshold(y_val, val_scores)
+                val_pred = (val_scores >= val_best).astype(int)
                 test_pred = (test_scores >= val_best).astype(int)
+                val_metrics = binary_metrics(y_val, val_pred, val_scores, val_best)
                 metrics = binary_metrics(y_test, test_pred, test_scores, val_best)
-                metrics.update({"model_name": model_name, "feature_version": version, "feature_count": len(features), "status": "ok"})
+                metrics.update(
+                    {
+                        "model_name": model_name,
+                        "feature_version": version,
+                        "feature_count": len(features),
+                        "selection_metric_val_referable_recall": val_metrics["referable_recall"],
+                        "selection_metric_val_f1": val_metrics["f1"],
+                        "selection_metric_val_balanced_accuracy": val_metrics["balanced_accuracy"],
+                        "selection_metric_val_false_positives": val_metrics["false_positives"],
+                        "selection_metric_val_false_negatives": val_metrics["false_negatives"],
+                        "status": "ok",
+                    }
+                )
                 results.append(ModelResult("binary", model_name, version, metrics, fitted, features, val_best))
                 for threshold in BINARY_THRESHOLDS:
                     pred = (val_scores >= threshold).astype(int)
@@ -1148,10 +1174,10 @@ def select_best_binary(results: list[ModelResult], threshold_rows: list[dict[str
     best = max(
         valid,
         key=lambda row: (
-            float(row.metrics.get("referable_recall", 0)) >= APPDR_PRODUCTION_BINARY["referable_recall"],
-            float(row.metrics.get("f1", 0)),
-            float(row.metrics.get("balanced_accuracy", 0)),
-            -float(row.metrics.get("false_positives", 999999)),
+            float(row.metrics.get("selection_metric_val_referable_recall", 0)) >= APPDR_PRODUCTION_BINARY["referable_recall"],
+            float(row.metrics.get("selection_metric_val_f1", 0)),
+            float(row.metrics.get("selection_metric_val_balanced_accuracy", 0)),
+            -float(row.metrics.get("selection_metric_val_false_positives", 999999)),
         ),
     )
     return best, best.metrics
@@ -1236,14 +1262,17 @@ def write_calibration(best_binary: ModelResult, best_threshold: dict[str, Any], 
 def write_comparison_reports(best_five: ModelResult, best_binary: ModelResult, best_threshold: dict[str, Any]) -> None:
     appdr_5 = read_first(FULL_CNN_DIR / "appdr_current_5class_metrics.csv") or APPDR_PRODUCTION_5
     appdr_bin = read_first(FULL_CNN_DIR / "appdr_current_binary_metrics.csv") or APPDR_PRODUCTION_BINARY
-    cnn_5 = read_first(FULL_CNN_DIR / "cnn_5class_metrics.csv")
-    cnn_bin = read_first(FULL_CNN_DIR / "cnn_binary_metrics.csv")
+    previous_cnn_5 = read_first(FULL_CNN_DIR / "cnn_5class_metrics.csv")
+    previous_cnn_bin = read_first(FULL_CNN_DIR / "cnn_binary_metrics.csv")
+    cnn_5 = read_json_or_empty(CNN_SOURCE_DIR / "efficientnet_b3_full_training" / "test_metrics_best_checkpoint.json") or previous_cnn_5
+    cnn_bin = load_trained_cnn_binary_metrics() or previous_cnn_bin
     prev_hybrid_5 = read_json_or_empty(PREVIOUS_HYBRID_DIR / "hybrid_5class_metrics.json")
     prev_hybrid_bin = read_json_or_empty(PREVIOUS_HYBRID_DIR / "hybrid_binary_metrics.json")
     comparison_5 = [
         compare_5_row("AppDR production XGBoost", "203 handcrafted", True, False, "", "XGBoost", appdr_5, "same full test split"),
         compare_5_row("Best experimental feature-based AppDR", "expanded handcrafted", True, False, "", "LightGBM top150", BEST_EXPERIMENTAL_5, "reported prior experiment"),
-        compare_5_row("Full straight CNN", "image CNN", False, True, "", "ResNet50 GeM SmoothL1", cnn_5, "same full test split"),
+        compare_5_row("Fully trained straight CNN", "image CNN", False, True, "", "EfficientNet-B3 GeM weighted CE", cnn_5, "validation-selected epoch 16; same full test split"),
+        compare_5_row("Previous one-epoch straight CNN", "image CNN", False, True, "", "ResNet50 GeM SmoothL1", previous_cnn_5, "previous weak baseline; same full test split"),
         compare_5_row("Previous full hybrid", "handcrafted + CNN", True, True, prev_hybrid_5.get("feature_version", ""), prev_hybrid_5.get("model_name", "LightGBM"), prev_hybrid_5, "previous full split hybrid with one-epoch ResNet source"),
         compare_5_row("Maximized validation-selected hybrid", "handcrafted + CNN", True, True, best_five.feature_version, best_five.model_name, best_five.metrics, "same full test split; selected by validation macro F1"),
     ]
@@ -1253,7 +1282,8 @@ def write_comparison_reports(best_five: ModelResult, best_binary: ModelResult, b
     write_rows(OUTPUT_DIR / "comparison_5class_all.csv", comparison_5)
     comparison_bin = [
         compare_bin_row("AppDR production SVM", "203 handcrafted", "", "SVM RBF", appdr_bin, "same full test split"),
-        compare_bin_row("Full straight CNN binary", "image CNN", "", "ResNet50 derived", cnn_bin, "same full test split"),
+        compare_bin_row("Fully trained straight CNN binary", "image CNN", "", "EfficientNet-B3 class >= 2", cnn_bin, "validation-selected epoch 16; same full test split"),
+        compare_bin_row("Previous one-epoch straight CNN binary", "image CNN", "", "ResNet50 derived", previous_cnn_bin, "previous weak baseline; same full test split"),
         compare_bin_row("Previous full hybrid binary", "handcrafted + CNN", prev_hybrid_bin.get("feature_version", prev_hybrid_bin.get("feature_set", "")), prev_hybrid_bin.get("model_name", ""), prev_hybrid_bin, "previous full split hybrid"),
         compare_bin_row("Maximized hybrid binary selected operating point", "handcrafted + CNN", best_binary.feature_version, best_binary.model_name, best_threshold, "same full test split; threshold selected on validation"),
     ]
@@ -1265,6 +1295,23 @@ def write_comparison_reports(best_five: ModelResult, best_binary: ModelResult, b
     (OUTPUT_DIR / "full_training_hybrid_vs_appdr_report.md").write_text(report["markdown"], encoding="utf-8")
     write_json(OUTPUT_DIR / "full_training_hybrid_vs_appdr_report.json", report)
     (OUTPUT_DIR / "final_recommendation.md").write_text(report["recommendation"], encoding="utf-8")
+
+
+def load_trained_cnn_binary_metrics() -> dict[str, Any]:
+    source_id = "efficientnet_b3_full_training"
+    features_path = OUTPUT_DIR / "cnn_features_test.csv"
+    if not features_path.exists():
+        return {}
+    class_column = f"cnn_{source_id}__predicted_class"
+    score_column = f"cnn_{source_id}__referable_probability"
+    frame = pd.read_csv(features_path, usecols=["diagnosis", class_column, score_column])
+    y_true = (frame["diagnosis"].to_numpy(dtype=int) >= 2).astype(int)
+    y_pred = (frame[class_column].to_numpy(dtype=int) >= 2).astype(int)
+    scores = frame[score_column].to_numpy(dtype=float)
+    metrics = binary_metrics(y_true, y_pred, scores, 0.5)
+    metrics["threshold"] = "class>=2"
+    write_json(CNN_SOURCE_DIR / source_id / "test_binary_metrics.json", metrics)
+    return metrics
 
 
 def compare_5_row(model: str, input_type: str, uses_appdr: bool, uses_cnn: bool, version: str, algorithm: str, metrics: dict[str, Any], notes: str) -> dict[str, Any]:

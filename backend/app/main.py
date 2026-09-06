@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,9 +26,10 @@ from app.task_queue import get_task_status, submit_analysis, user_safe_analysis_
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 TRIAL_FEEDBACK_PATH = BACKEND_DIR / "results" / "ml_full_study_upgrade" / "trial_feedback.jsonl"
+MAX_UPLOAD_BYTES = int(os.getenv("OPTIMEYE_MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 
 app = FastAPI(
-    title="DR Screening Classical Processing API",
+    title="Optimeye Classical Processing API",
     version="0.1.0",
     description=(
         "Automated classical retinal image processing for diabetic retinopathy "
@@ -47,7 +49,7 @@ app.add_middleware(
 @app.get("/")
 def root() -> dict[str, object]:
     return {
-        "name": "AppDR clinical decision-support API",
+        "name": "Optimeye clinical decision-support API",
         "status": "ok",
         "scope": (
             "Automated retinal screening support using handcrafted classical "
@@ -75,13 +77,7 @@ def health() -> dict[str, object]:
 async def analyze(
     file: UploadFile = File(...),
 ) -> AnalyzeTaskResponse:
-    if file.content_type is None or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Please upload an image file.")
-
-    image_bytes = await file.read()
-
-    if not image_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    image_bytes = await read_validated_image(file)
 
     task_id = submit_analysis(file.filename or "uploaded-image", image_bytes)
 
@@ -106,13 +102,7 @@ def task_status(task_id: str) -> AnalyzeTaskStatusResponse:
 async def analyze_sync(
     file: UploadFile = File(...),
 ) -> AnalyzeResponse:
-    if file.content_type is None or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Please upload an image file.")
-
-    image_bytes = await file.read()
-
-    if not image_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    image_bytes = await read_validated_image(file)
 
     try:
         output = analyze_image(image_bytes)
@@ -143,11 +133,7 @@ async def analyze_session(
 
     session_files: list[tuple[str, bytes, SessionImageMetadata]] = []
     for index, file in enumerate(files):
-        if file.content_type is None or not file.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="Please upload image files only.")
-        image_bytes = await file.read()
-        if not image_bytes:
-            raise HTTPException(status_code=400, detail=f"{file.filename or 'Image'} is empty.")
+        image_bytes = await read_validated_image(file, empty_name=file.filename or "Image")
         session_files.append(
             (
                 file.filename or f"session-image-{index + 1}",
@@ -189,3 +175,22 @@ def form_value_at(values: list[str] | None, index: int, default: str) -> str:
         return default
     value = str(values[index]).strip()
     return value or default
+
+
+async def read_validated_image(file: UploadFile, empty_name: str = "Uploaded file") -> bytes:
+    if file.content_type is None or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Please upload an image file.")
+
+    image_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail=f"{empty_name} is empty.")
+
+    if len(image_bytes) > MAX_UPLOAD_BYTES:
+        size_mb = MAX_UPLOAD_BYTES / (1024 * 1024)
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image is too large. Please upload an image up to {size_mb:.0f} MB.",
+        )
+
+    return image_bytes
